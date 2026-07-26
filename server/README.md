@@ -16,6 +16,7 @@ PI_SERVER_PORT=3333
 PI_SERVER_EVENT_HISTORY=1000
 PI_AGENT_DIR=~/.pi/agent
 PI_SERVER_AUTH_TOKEN=optional-bearer-token
+PI_SERVER_PUBLIC_URL=http://127.0.0.1:3333
 ```
 
 `PI_SERVER_AUTH_TOKEN` should be set before exposing the server through

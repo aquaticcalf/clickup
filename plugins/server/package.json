@@ -1,0 +1,19 @@
+{
+  "name": "@aquaticcalf/pi-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:"
+  },
+  "dependencies": {
+    "keytar": "catalog:",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:",
+    "@types/qrcode": "^1.5.6"
+  }
+}
