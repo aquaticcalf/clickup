@@ -1,6 +1,6 @@
-import { StringEnum } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
-import { REQUEST_METHODS } from "./constants.ts";
+import { StringEnum } from "@earendil-works/pi-ai"
+import { Type } from "typebox"
+import { REQUEST_METHODS } from "./constants.ts"
 
 export const RequestParams = Type.Object({
   method: StringEnum(REQUEST_METHODS),
@@ -14,4 +14,4 @@ export const RequestParams = Type.Object({
     }),
   ),
   body: Type.Optional(Type.Unknown({ description: "JSON request body for POST, PUT, or PATCH" })),
-});
+})

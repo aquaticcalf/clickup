@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "peerDependencies": {
+  "devDependencies": {
     "@earendil-works/pi-coding-agent": "catalog:"
   },
-  "devDependencies": {
+  "peerDependencies": {
     "@earendil-works/pi-coding-agent": "catalog:"
   }
 }

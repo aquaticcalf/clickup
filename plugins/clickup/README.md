@@ -29,12 +29,12 @@ Log out from `/clickup` to clear the in-memory token and delete the saved creden
 
 The generic `clickup_request` tool can call any ClickUp API v2 endpoint, but every request is checked against the current permission set:
 
-| Permission | HTTP methods |
-|---|---|
-| `r` | `GET` |
-| `c` | `POST` |
-| `u` | `PUT`, `PATCH` |
-| `d` | `DELETE` |
+| Permission | HTTP methods   |
+| ---------- | -------------- |
+| `r`        | `GET`          |
+| `c`        | `POST`         |
+| `u`        | `PUT`, `PATCH` |
+| `d`        | `DELETE`       |
 
 The tool schema remains active for the session to preserve provider/tool-schema caching. Both the tool executor and the `tool_call` gate enforce the current permissions, so stopping access blocks stale calls too.
 

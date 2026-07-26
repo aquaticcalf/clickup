@@ -3,16 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "peerDependencies": {
+  "dependencies": {
+    "keytar": "catalog:"
+  },
+  "devDependencies": {
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-coding-agent": "catalog:",
     "@earendil-works/pi-tui": "catalog:",
     "typebox": "catalog:"
   },
-  "dependencies": {
-    "keytar": "catalog:"
-  },
-  "devDependencies": {
+  "peerDependencies": {
     "@earendil-works/pi-ai": "catalog:",
     "@earendil-works/pi-coding-agent": "catalog:",
     "@earendil-works/pi-tui": "catalog:",

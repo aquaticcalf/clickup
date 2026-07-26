@@ -1,12 +1,12 @@
-import { Elysia, status, t } from "elysia";
-import { openapi } from "@elysiajs/openapi";
-import { EventHub } from "./events.ts";
-import { SessionRegistry } from "./sessions.ts";
-import type { ServerConfig, ServerEvent } from "./types.ts";
+import { Elysia, status, t } from "elysia"
+import { openapi } from "@elysiajs/openapi"
+import { EventHub } from "./events.ts"
+import { SessionRegistry } from "./sessions.ts"
+import type { ServerConfig, ServerEvent } from "./types.ts"
 
 const ErrorResponse = t.Object({
   error: t.String(),
-});
+})
 
 const SessionStatus = t.Object({
   id: t.String(),
@@ -20,24 +20,24 @@ const SessionStatus = t.Object({
   model: t.Optional(t.Object({ provider: t.String(), id: t.String() })),
   thinkingLevel: t.String(),
   activeTools: t.Array(t.String()),
-});
+})
 
 const CreateSessionBody = t.Object({
   cwd: t.Optional(t.String()),
   sessionFile: t.Optional(t.String()),
-});
+})
 
 const PromptBody = t.Object({
   text: t.String({ minLength: 1 }),
-});
+})
 
 const BashBody = t.Object({
   command: t.String({ minLength: 1 }),
   excludeFromContext: t.Optional(t.Boolean()),
-});
+})
 
 function jsonError(message: string) {
-  return { error: message };
+  return { error: message }
 }
 
 function formatSse(event: ServerEvent): string {
@@ -47,7 +47,7 @@ function formatSse(event: ServerEvent): string {
     `data: ${JSON.stringify(event)}`,
     "",
     "",
-  ].join("\n");
+  ].join("\n")
 }
 
 function eventStream(
@@ -56,46 +56,46 @@ function eventStream(
   sessionId: string,
   since: number,
 ): Response {
-  let cancelStream = () => {};
+  let cancelStream = () => {}
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const encoder = new TextEncoder();
-      let closed = false;
-      let heartbeat: ReturnType<typeof setInterval> | undefined;
-      let unsubscribe = () => {};
+      const encoder = new TextEncoder()
+      let closed = false
+      let heartbeat: ReturnType<typeof setInterval> | undefined
+      let unsubscribe = () => {}
 
       const close = () => {
-        if (closed) return;
-        closed = true;
-        unsubscribe();
-        if (heartbeat) clearInterval(heartbeat);
-        request.signal.removeEventListener("abort", close);
+        if (closed) return
+        closed = true
+        unsubscribe()
+        if (heartbeat) clearInterval(heartbeat)
+        request.signal.removeEventListener("abort", close)
         try {
-          controller.close();
+          controller.close()
         } catch {
           // the client may have disconnected before the stream was closed
         }
-      };
+      }
 
       const push = (event: ServerEvent) => {
-        if (!closed) controller.enqueue(encoder.encode(formatSse(event)));
-      };
+        if (!closed) controller.enqueue(encoder.encode(formatSse(event)))
+      }
 
-      cancelStream = close;
-      unsubscribe = events.subscribe(sessionId, push);
-      for (const event of events.since(sessionId, since)) push(event);
-      controller.enqueue(encoder.encode(": connected\n\n"));
+      cancelStream = close
+      unsubscribe = events.subscribe(sessionId, push)
+      for (const event of events.since(sessionId, since)) push(event)
+      controller.enqueue(encoder.encode(": connected\n\n"))
       heartbeat = setInterval(() => {
-        if (!closed) controller.enqueue(encoder.encode(": heartbeat\n\n"));
-      }, 15_000);
-      request.signal.addEventListener("abort", close, { once: true });
+        if (!closed) controller.enqueue(encoder.encode(": heartbeat\n\n"))
+      }, 15_000)
+      request.signal.addEventListener("abort", close, { once: true })
     },
     cancel() {
       // native http disconnects trigger request.signal. fetch callers can cancel
       // the body directly, in which case the request signal may not fire.
-      cancelStream();
+      cancelStream()
     },
-  });
+  })
 
   return new Response(stream, {
     headers: {
@@ -104,12 +104,12 @@ function eventStream(
       "content-type": "text/event-stream",
       "x-accel-buffering": "no",
     },
-  });
+  })
 }
 
 export function createApp(config: ServerConfig) {
-  const events = new EventHub(config.eventHistorySize);
-  const sessions = new SessionRegistry(config, events);
+  const events = new EventHub(config.eventHistorySize)
+  const sessions = new SessionRegistry(config, events)
 
   const app = new Elysia({ name: "pi-host" })
     .use(
@@ -138,21 +138,17 @@ export function createApp(config: ServerConfig) {
       }),
     )
     .onBeforeHandle(({ request, set, path }) => {
-      if (!config.authToken || path === "/v1/health" || path.startsWith("/openapi")) return;
-      const authorization = request.headers.get("authorization");
+      if (!config.authToken || path === "/v1/health" || path.startsWith("/openapi")) return
+      const authorization = request.headers.get("authorization")
       if (authorization !== `Bearer ${config.authToken}`) {
-        set.status = 401;
-        return jsonError("authentication required");
+        set.status = 401
+        return jsonError("authentication required")
       }
     })
-    .get(
-      "/v1/health",
-      () => ({ ok: true, service: "pi-host" }),
-      {
-        detail: { tags: ["system"] },
-        response: t.Object({ ok: t.Boolean(), service: t.String() }),
-      },
-    )
+    .get("/v1/health", () => ({ ok: true, service: "pi-host" }), {
+      detail: { tags: ["system"] },
+      response: t.Object({ ok: t.Boolean(), service: t.String() }),
+    })
     .get(
       "/v1/sessions",
       () => ({ sessions: sessions.list().map((session) => sessions.status(session)) }),
@@ -165,10 +161,10 @@ export function createApp(config: ServerConfig) {
       "/v1/sessions",
       async ({ body }) => {
         try {
-          const session = await sessions.create(body);
-          return sessions.status(session);
+          const session = await sessions.create(body)
+          return sessions.status(session)
         } catch (error) {
-          return status(400, jsonError(error instanceof Error ? error.message : String(error)));
+          return status(400, jsonError(error instanceof Error ? error.message : String(error)))
         }
       },
       {
@@ -180,9 +176,9 @@ export function createApp(config: ServerConfig) {
     .get(
       "/v1/sessions/:id",
       ({ params }) => {
-        const session = sessions.get(params.id);
-        if (!session) return status(404, jsonError("session not found"));
-        return sessions.status(session);
+        const session = sessions.get(params.id)
+        if (!session) return status(404, jsonError("session not found"))
+        return sessions.status(session)
       },
       {
         params: t.Object({ id: t.String() }),
@@ -193,8 +189,8 @@ export function createApp(config: ServerConfig) {
     .delete(
       "/v1/sessions/:id",
       async ({ params }) => {
-        if (!(await sessions.dispose(params.id))) return status(404, jsonError("session not found"));
-        return { ok: true };
+        if (!(await sessions.dispose(params.id))) return status(404, jsonError("session not found"))
+        return { ok: true }
       },
       {
         params: t.Object({ id: t.String() }),
@@ -206,10 +202,10 @@ export function createApp(config: ServerConfig) {
       "/v1/sessions/:id/prompt",
       async ({ params, body }) => {
         try {
-          await sessions.run(params.id, (session) => session.prompt(body.text));
-          return { ok: true };
+          await sessions.run(params.id, (session) => session.prompt(body.text))
+          return { ok: true }
         } catch (error) {
-          return status(404, jsonError(error instanceof Error ? error.message : String(error)));
+          return status(404, jsonError(error instanceof Error ? error.message : String(error)))
         }
       },
       {
@@ -224,15 +220,14 @@ export function createApp(config: ServerConfig) {
       async ({ params, body }) => {
         try {
           const result = await sessions.run(params.id, (session) =>
-            session.executeBash(
-              body.command,
-              undefined,
-              { excludeFromContext: body.excludeFromContext ?? false, id: params.id },
-            ),
-          );
-          return { sessionId: params.id, command: body.command, result };
+            session.executeBash(body.command, undefined, {
+              excludeFromContext: body.excludeFromContext ?? false,
+              id: params.id,
+            }),
+          )
+          return { sessionId: params.id, command: body.command, result }
         } catch (error) {
-          return status(404, jsonError(error instanceof Error ? error.message : String(error)));
+          return status(404, jsonError(error instanceof Error ? error.message : String(error)))
         }
       },
       {
@@ -249,10 +244,10 @@ export function createApp(config: ServerConfig) {
     .post(
       "/v1/sessions/:id/abort",
       async ({ params }) => {
-        const session = sessions.get(params.id);
-        if (!session) return status(404, jsonError("session not found"));
-        await session.session.abort();
-        return { ok: true };
+        const session = sessions.get(params.id)
+        if (!session) return status(404, jsonError("session not found"))
+        await session.session.abort()
+        return { ok: true }
       },
       {
         params: t.Object({ id: t.String() }),
@@ -263,9 +258,9 @@ export function createApp(config: ServerConfig) {
     .get(
       "/v1/sessions/:id/events",
       ({ params, query, request }) => {
-        if (!sessions.get(params.id)) return status(404, jsonError("session not found"));
-        const since = typeof query.since === "string" ? Number(query.since) : 0;
-        return eventStream(request, events, params.id, Number.isFinite(since) ? since : 0);
+        if (!sessions.get(params.id)) return status(404, jsonError("session not found"))
+        const since = typeof query.since === "string" ? Number(query.since) : 0
+        return eventStream(request, events, params.id, Number.isFinite(since) ? since : 0)
       },
       {
         params: t.Object({ id: t.String() }),
@@ -276,7 +271,7 @@ export function createApp(config: ServerConfig) {
         },
         response: { 200: t.String(), 404: ErrorResponse },
       },
-    );
+    )
 
-  return { app, events, sessions };
+  return { app, events, sessions }
 }

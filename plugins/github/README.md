@@ -27,4 +27,3 @@ The menu follows pi's `/settings` style: `SettingsList` rows open nested submenu
 PR checkout requires a clean tree by default. The optional assisted-commit policy stages and commits all changes only after confirmation; it never pushes automatically. The plugin does not reset, clean, force-checkout, or silently push.
 
 PR checkout happens directly in the current repository as a detached checkout.
-
