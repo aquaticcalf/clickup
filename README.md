@@ -16,22 +16,48 @@ Permissions are additive on start and subtractive on stop. Every start/stop comm
 
 When starting access without a saved credential, the extension opens a masked popup for a ClickUp API/personal token. Credentials are stored with `keytar` in the operating system credential store and are never included in tool arguments or session messages.
 
-## Install
+## Try without cloning or permanently installing
 
-From this package directory:
+Run the published GitHub package for one pi session:
+
+```bash
+pi -e git:github.com/aquaticcalf/clickup@master
+```
+
+This uses pi's temporary extension loading. It does not add the package to your pi settings.
+
+When pi starts, try:
+
+```text
+/clickup-start
+```
+
+The empty command grants all permissions and opens the API-key popup if needed. Then use `/clickup-stop` to revoke everything.
+
+## Install permanently
+
+From GitHub:
+
+```bash
+pi install git:github.com/aquaticcalf/clickup@master
+```
+
+From a local checkout:
 
 ```bash
 npm install
 pi install .
 ```
 
-Or try it without installing:
+For a local one-session test from an existing checkout:
 
 ```bash
+pi -e .
+# or
 pi -e ./extensions/clickup/index.ts
 ```
 
-After installation, restart pi or run `/reload`.
+After a permanent install, restart pi or run `/reload`.
 
 ## Structure
 
