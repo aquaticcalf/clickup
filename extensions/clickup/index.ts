@@ -5,7 +5,7 @@ import { promptForApiKey } from "./auth/prompt.ts";
 import { ClickUpClient } from "./api/client.ts";
 import { RequestParams } from "./api-schema.ts";
 import { PermissionManager, parsePermissions, permissionForMethod, permissionText } from "./permissions.ts";
-import { reportPermissions } from "./ui/permissions.ts";
+import { publishPermissionsToModel, reportPermissions } from "./ui/permissions.ts";
 
 export default function clickup(pi: ExtensionAPI): void {
   const permissions = new PermissionManager();
@@ -13,22 +13,24 @@ export default function clickup(pi: ExtensionAPI): void {
   let apiKey: string | undefined;
   const client = new ClickUpClient(() => apiKey, permissions);
 
-  const syncToolActivation = (): void => {
-    const active = pi.getActiveTools().filter((name) => name !== CLICKUP_TOOL_NAME);
-    if (permissions.hasAny) active.push(CLICKUP_TOOL_NAME);
-    pi.setActiveTools([...new Set(active)]);
+  // Keep the tool schema active for the whole session. The permission gate is
+  // the security boundary; keeping the schema stable preserves provider caches.
+  const ensureToolActive = (): void => {
+    const active = pi.getActiveTools();
+    if (!active.includes(CLICKUP_TOOL_NAME)) pi.setActiveTools([...active, CLICKUP_TOOL_NAME]);
   };
 
   const reset = (): void => {
     permissions.reset();
     apiKey = undefined;
-    syncToolActivation();
   };
 
   // Access is intentionally ephemeral: new and reloaded sessions start locked.
   pi.on("session_start", (_event, ctx) => {
     reset();
+    ensureToolActive();
     reportPermissions(ctx, permissions, "ClickUp access is locked for this session.");
+    publishPermissionsToModel(pi, permissions);
   });
 
   pi.on("session_shutdown", reset);
@@ -50,12 +52,12 @@ export default function clickup(pi: ExtensionAPI): void {
         }
 
         permissions.grant(requested);
-        syncToolActivation();
         ctx.ui.notify(`ClickUp access started: granted ${permissionText(requested)}.`, "info");
       } catch (error) {
         ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
       } finally {
         reportPermissions(ctx, permissions, "ClickUp permission status:");
+        publishPermissionsToModel(pi, permissions);
       }
     },
   });
@@ -67,12 +69,12 @@ export default function clickup(pi: ExtensionAPI): void {
         const revoked = parsePermissions(args, true);
         permissions.revoke(revoked);
         if (!permissions.hasAny) apiKey = undefined;
-        syncToolActivation();
         ctx.ui.notify(`ClickUp access stopped: revoked ${permissionText(revoked)}.`, "info");
       } catch (error) {
         ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
       } finally {
         reportPermissions(ctx, permissions, "ClickUp permission status:");
+        publishPermissionsToModel(pi, permissions);
       }
     },
   });
@@ -100,7 +102,7 @@ export default function clickup(pi: ExtensionAPI): void {
     name: CLICKUP_TOOL_NAME,
     label: "ClickUp Request",
     description:
-      "Make an authenticated request to any ClickUp API v2 endpoint. This tool only appears after the user explicitly runs /clickup-start and each HTTP method is checked against active CRUD permissions.",
+      "Make an authenticated request to any ClickUp API v2 endpoint. The tool is always present for cache stability, but requests are rejected unless the latest user-granted CRUD permission allows the HTTP method.",
     promptSnippet: "Use ClickUp API v2 with the currently granted CRUD permissions",
     parameters: RequestParams,
     executionMode: "sequential",

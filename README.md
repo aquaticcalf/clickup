@@ -76,4 +76,8 @@ extensions/clickup/
 
 ## Notes
 
-The extension exposes a generic `clickup_request` tool only while at least one permission is active. CRUD permissions map to HTTP methods: `r` = GET, `c` = POST, `u` = PUT/PATCH, and `d` = DELETE. The token itself may have broad ClickUp API capabilities; the extension enforces the runtime permission boundary.
+The extension exposes a generic `clickup_request` tool throughout the session for stable provider/tool-schema caching. It is unusable while stopped: both the tool executor and `tool_call` gate enforce the current permission state.
+
+After every access change, the extension adds a hidden, non-system conversation message containing the authoritative current state. This lets the model know whether ClickUp is active without changing the system prompt or repeatedly invalidating its stable cache prefix.
+
+CRUD permissions map to HTTP methods: `r` = GET, `c` = POST, `u` = PUT/PATCH, and `d` = DELETE. The token itself may have broad ClickUp API capabilities; the extension enforces the runtime permission boundary.
