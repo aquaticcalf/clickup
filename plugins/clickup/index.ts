@@ -29,7 +29,7 @@ export default function clickup(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, ctx) => {
     reset();
     ensureToolActive();
-    reportPermissions(ctx, permissions, "ClickUp access is locked for this session.");
+    // Keep the model informed without adding startup UI noise.
     publishPermissionsToModel(pi, permissions);
   });
 
