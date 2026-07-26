@@ -33,6 +33,21 @@ pi -e ./extensions/clickup/index.ts
 
 After installation, restart pi or run `/reload`.
 
+## Structure
+
+```text
+extensions/clickup/
+├── index.ts                 # pi registration and lifecycle orchestration
+├── permissions.ts           # CRUD parsing, state, and request cancellation
+├── api-schema.ts            # ClickUp tool schema
+├── api/client.ts            # URL validation and HTTP transport
+├── auth/credential-store.ts # OS credential-store integration
+├── auth/prompt.ts           # masked TUI credential prompt
+├── ui/permissions.ts        # status and permission notifications
+├── constants.ts
+└── types.ts
+```
+
 ## Notes
 
 The extension exposes a generic `clickup_request` tool only while at least one permission is active. CRUD permissions map to HTTP methods: `r` = GET, `c` = POST, `u` = PUT/PATCH, and `d` = DELETE. The token itself may have broad ClickUp API capabilities; the extension enforces the runtime permission boundary.
