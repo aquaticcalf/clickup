@@ -16,7 +16,7 @@
   ],
   "pi": {
     "extensions": [
-      "./extensions/clickup.ts"
+      "./extensions/clickup"
     ]
   },
   "peerDependencies": {

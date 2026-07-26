@@ -28,7 +28,7 @@ pi install .
 Or try it without installing:
 
 ```bash
-pi -e ./extensions/clickup.ts
+pi -e ./extensions/clickup/index.ts
 ```
 
 After installation, restart pi or run `/reload`.
