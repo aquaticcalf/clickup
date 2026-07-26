@@ -48,9 +48,8 @@ function runProcess(command: string, args: string[], input: Buffer): Promise<boo
 
 async function playFallback(wav: Buffer): Promise<void> {
   if (process.platform === "win32") {
-    const encoded = wav.toString("base64");
-    const script = "$b=[Convert]::FromBase64String('" + encoded + "');$m=[IO.MemoryStream]::new($b);$p=[System.Media.SoundPlayer]::new($m);$p.PlaySync();$p.Dispose();$m.Dispose()";
-    if (await runProcess("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], Buffer.alloc(0))) return;
+    const script = "$m=[IO.MemoryStream]::new();[Console]::OpenStandardInput().CopyTo($m);$m.Position=0;$p=[System.Media.SoundPlayer]::new($m);$p.PlaySync();$p.Dispose();$m.Dispose()";
+    if (await runProcess("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], wav)) return;
   } else if (process.platform === "darwin") {
     if (await runProcess("afplay", ["-"], wav)) return;
   } else {
