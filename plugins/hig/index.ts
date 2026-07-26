@@ -1,5 +1,6 @@
+import { userInfo } from "node:os";
 import { CustomEditor, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 
 const THEME_NAME = "hig";
 const ALT_SCREEN_ON = "\u001b[?1049h\u001b[2J\u001b[H";
@@ -8,16 +9,29 @@ const FACE_WIDTH = 45;
 const FACE_HEIGHT = 14;
 const REDUCED_MOTION = /^(1|true|yes)$/i.test(process.env.HIG_REDUCED_MOTION ?? "");
 
+function getUserName(): string {
+  try {
+    return userInfo().username.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+  } catch {
+    return "";
+  }
+}
+
+const USER_NAME = getUserName();
+const GREETING_TEXT = USER_NAME ? `hi, ${USER_NAME}` : "hi";
+
 function buildCuteFrame(expression: string): string[] {
   const rows = Array.from({ length: FACE_HEIGHT }, () => " ".repeat(FACE_WIDTH));
 
   const put = (text: string, row: number): void => {
-    const start = Math.max(0, Math.floor((FACE_WIDTH - text.length) / 2));
-    const right = Math.max(0, FACE_WIDTH - start - text.length);
-    rows[row] = " ".repeat(start) + text + " ".repeat(right);
+    const fitted = truncateToWidth(text, FACE_WIDTH, "");
+    const textWidth = visibleWidth(fitted);
+    const start = Math.max(0, Math.floor((FACE_WIDTH - textWidth) / 2));
+    const right = Math.max(0, FACE_WIDTH - start - textWidth);
+    rows[row] = " ".repeat(start) + fitted + " ".repeat(right);
   };
 
-  put(`*:･ﾟ✧*:･ﾟ✧ hi, sam ${expression} ✧ﾟ･: *✧ﾟ･:*`, 6);
+  put(`*:･ﾟ✧*:･ﾟ✧ ${GREETING_TEXT} ${expression} ✧ﾟ･: *✧ﾟ･:*`, 6);
   put("♡ ( =^･ω･^= ) ♡", 8);
 
   return rows;
@@ -101,7 +115,7 @@ class HIGEditor extends CustomEditor {
     const topSpace = Math.max(0, Math.floor((markSpace - face.length) / 2));
     const bottomSpace = Math.max(0, markSpace - topSpace - face.length);
     const mark = face.map((line) => {
-      const greeting = line.replace("hi, sam", this.ctx.ui.theme.bold("hi, sam"));
+      const greeting = line.replace(GREETING_TEXT, this.ctx.ui.theme.bold(GREETING_TEXT));
       const styled = this.ctx.ui.theme.fg("accent", greeting);
       if (width < FACE_WIDTH) return truncateToWidth(styled, width, "");
       const left = Math.floor((width - FACE_WIDTH) / 2);
