@@ -38,7 +38,7 @@ The generic `clickup_request` tool can call any ClickUp API v2 endpoint, but eve
 
 The tool schema remains active for the session to preserve provider/tool-schema caching. Both the tool executor and the `tool_call` gate enforce the current permissions, so stopping access blocks stale calls too.
 
-After every access change, a hidden non-system conversation message tells the model the authoritative current state. This avoids changing the system prompt or repeatedly invalidating its stable cache prefix.
+The tool schema stays stable for provider caching. Access and permission state is enforced by the tool-call gate and executor, without injecting access-state notices into the model context.
 
 ## Plugin development
 

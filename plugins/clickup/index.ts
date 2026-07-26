@@ -6,7 +6,6 @@ import { promptForApiKey } from "./auth/prompt.ts";
 import { ClickUpClient } from "./api/client.ts";
 import { RequestParams } from "./api-schema.ts";
 import { PermissionManager, permissionForMethod, permissionText } from "./permissions.ts";
-import { publishPermissionsToModel } from "./ui/permissions.ts";
 
 export default function clickup(pi: ExtensionAPI): void {
   const permissions = new PermissionManager();
@@ -26,10 +25,9 @@ export default function clickup(pi: ExtensionAPI): void {
     apiKey = undefined;
   };
 
-  const syncState = (ctx: ExtensionCommandContext, note?: string): void => {
+  const syncState = (ctx: ExtensionCommandContext): void => {
     const current = permissionText(permissions.current);
     ctx.ui.setStatus(CLICKUP_STATUS_KEY, current === "none" ? undefined : `ClickUp: ${current}`);
-    publishPermissionsToModel(pi, permissions, note);
   };
 
   const actions = (ctx: ExtensionCommandContext): ClickUpMenuActions => ({
@@ -73,7 +71,7 @@ export default function clickup(pi: ExtensionAPI): void {
       const environmentMessage = environmentCredential
         ? " CLICKUP_API_KEY is still set externally and must be unset separately."
         : "";
-      syncState(ctx, "Credential state: LOGGED OUT. Access must be explicitly started again.");
+      syncState(ctx);
       return `ClickUp logged out. ${storageMessage}${environmentMessage}`;
     },
     status: () => {
@@ -138,9 +136,8 @@ export default function clickup(pi: ExtensionAPI): void {
   pi.registerTool({
     name: CLICKUP_TOOL_NAME,
     label: "ClickUp Request",
-    description:
-      "Make an authenticated request to any ClickUp API v2 endpoint. The tool is always present for cache stability, but requests are rejected unless the latest user-granted CRUD permission allows the HTTP method.",
-    promptSnippet: "Use ClickUp API v2 with the currently granted CRUD permissions",
+    description: "Make an authenticated request to any ClickUp API v2 endpoint.",
+    promptSnippet: "Use the ClickUp API v2 request tool when needed.",
     parameters: RequestParams,
     executionMode: "sequential",
     async execute(_toolCallId, params, signal) {
