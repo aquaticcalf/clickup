@@ -53,6 +53,8 @@ function errorText(error: unknown): string {
 /** A core-style settings page: one list, one title, and one consistent escape path. */
 class SettingsPanel extends Container {
   private readonly list: SettingsList;
+  private readonly title: string;
+  private readonly description: string;
 
   constructor(
     title: string,
@@ -62,13 +64,8 @@ class SettingsPanel extends Container {
     onCancel: () => void,
   ) {
     super();
-    this.addChild(border());
-    this.addChild(new Text(currentTheme.bold(currentTheme.fg("accent", title)), 0, 0));
-    if (description) {
-      this.addChild(new Spacer(1));
-      this.addChild(new Text(currentTheme.fg("muted", description), 0, 0));
-    }
-    this.addChild(new Spacer(1));
+    this.title = title;
+    this.description = description;
     this.list = new SettingsList(
       items,
       Math.min(Math.max(items.length, 8), 15),
@@ -78,9 +75,32 @@ class SettingsPanel extends Container {
       { enableSearch: true },
     );
     this.addChild(this.list);
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(currentTheme.fg("dim", "  Enter to open · Esc to go back"), 0, 0));
-    this.addChild(border());
+  }
+
+  private submenuIsOpen(): boolean {
+    // SettingsList intentionally renders an active submenu in place. Hide this
+    // page's chrome while that happens, matching pi core's settings selector.
+    return Boolean((this.list as unknown as { submenuComponent?: Component }).submenuComponent);
+  }
+
+  override render(width: number): string[] {
+    const lines: string[] = [];
+    if (!this.submenuIsOpen()) {
+      lines.push(...border().render(width));
+      lines.push(...new Text(currentTheme.bold(currentTheme.fg("accent", this.title)), 0, 0).render(width));
+      if (this.description) {
+        lines.push("");
+        lines.push(...new Text(currentTheme.fg("muted", this.description), 0, 0).render(width));
+      }
+      lines.push("");
+    }
+
+    lines.push(...this.list.render(width));
+
+    if (!this.submenuIsOpen()) {
+      lines.push(...border().render(width));
+    }
+    return lines;
   }
 
   handleInput(data: string): void {
