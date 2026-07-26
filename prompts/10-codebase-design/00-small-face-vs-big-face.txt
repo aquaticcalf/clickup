@@ -1,0 +1,11 @@
+prefer small-face modules: keep the public api small and simple while hiding substantial complexity behind it.
+
+avoid big-face modules: a large api with little implementation usually pushes complexity onto every caller.
+
+when designing an api, ask:
+
+- can i reduce the number of functions?
+- can i simplify the parameters?
+- can i hide more complexity inside the module?
+
+make the caller's job simple, even when the implementation is sophisticated.
