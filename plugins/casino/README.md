@@ -12,9 +12,9 @@ A restrained casino-lounge visual theme for pi. It is optional and off by defaul
 
 When enabled, it applies a high-contrast dark theme with gold as the primary accent and muted teal/rose secondary colors across Pi's built-in interface: messages, tools, diffs, Markdown, syntax highlighting, thinking levels, borders, and status colors. The normal prompt border uses gold, while shell mode uses teal so the two states are immediately distinguishable.
 
-The Pi header is replaced by a compact Casino wordmark. The persistent status is `CASINO · READY ♦`; short, bounded status pulses such as `DEALING`, `HIT`, `BUST`, `HAND CLOSED`, and `PAYOUT` provide anticipation and outcome feedback without adding a banner or a continuously animated widget. During model work, the normal working indicator uses a subtle card-suit cycle.
+During model work, the normal working indicator uses a subtle card-suit cycle. Casino Mode does not add persistent header or footer labels.
 
-When toggled off, the indicator, status pulses, and working animation are cleared and the exact previous theme is restored.
+When toggled off, the indicator and working animation are cleared and the exact previous theme is restored.
 
 Set `CASINO_REDUCED_MOTION=1` to use a static working indicator.
 
