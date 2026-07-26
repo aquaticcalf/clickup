@@ -16,11 +16,9 @@ function buildPiAscii(): string[] {
   const left = 6;
   const right = PI_GLYPH_WIDTH - left - 1;
 
-  // Terminal line-drawing glyphs make a clean, unmistakable mathematical π:
-  // a rounded overbar with two strong descending stems.
-  rows[0][left] = "╭";
-  rows[0][right] = "╮";
-  for (let x = left + 1; x < right; x += 1) rows[0][x] = "━";
+  // Terminal glyphs form the actual lowercase mathematical π: a straight
+  // overbar with two descending stems. No box, arch, or decorative enclosure.
+  for (let x = left; x <= right; x += 1) rows[0][x] = "━";
   for (let y = 1; y < PI_GLYPH_HEIGHT; y += 1) {
     rows[y][left] = "┃";
     rows[y][right] = "┃";
@@ -50,6 +48,30 @@ function hasConversation(ctx: ExtensionContext): boolean {
   return ctx.sessionManager.getBranch().some((entry) => entry.type === "message");
 }
 
+function estimateConversationRows(ctx: ExtensionContext, width: number): number {
+  const contentWidth = Math.max(24, width - 8);
+  let rows = 0;
+
+  for (const entry of ctx.sessionManager.getBranch()) {
+    if (entry.type !== "message") continue;
+    const content = "content" in entry.message ? entry.message.content : "";
+    const text = typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content.map((part) => {
+            if (typeof part === "string") return part;
+            if (typeof part === "object" && part !== null && "text" in part) {
+              return typeof part.text === "string" ? part.text : "";
+            }
+            return "";
+          }).join(" ")
+        : "";
+    rows += Math.max(1, Math.ceil(text.length / contentWidth)) + 2;
+  }
+
+  return rows;
+}
+
 class HIGEditor extends CustomEditor {
   private readonly ctx: ExtensionContext;
 
@@ -66,18 +88,23 @@ class HIGEditor extends CustomEditor {
 
   override render(width: number): string[] {
     const editorLines = super.render(width);
-    if (hasConversation(this.ctx)) return editorLines;
-
-    // The core TUI keeps the viewport bottom-aligned. Reserve the remaining
-    // viewport here so the editor/footer stay at the bottom like a full-height
-    // web app, while the empty-state mark can sit in the visual center.
+    const conversationRows = estimateConversationRows(this.ctx, width);
     const available = Math.max(
-      PI_MARK.length,
-      this.tui.terminal.rows - editorLines.length - FOOTER_ROWS - DEFAULT_WIDGET_ROWS,
+      0,
+      this.tui.terminal.rows - editorLines.length - FOOTER_ROWS - DEFAULT_WIDGET_ROWS - conversationRows,
     );
-    const topSpace = Math.max(0, Math.floor((available - PI_MARK.length) / 2));
-    const bottomSpace = Math.max(0, available - topSpace - PI_MARK.length);
     const emptyLine = "";
+
+    // Keep the editor/footer at the bottom even after the empty-state mark
+    // disappears. When there is no chat, use that same space for the centered
+    // mark; when chat exists, use it as quiet breathing room below the chat.
+    if (hasConversation(this.ctx)) {
+      return [...Array.from({ length: available }, () => emptyLine), ...editorLines];
+    }
+
+    const markSpace = Math.max(PI_MARK.length, available);
+    const topSpace = Math.max(0, Math.floor((markSpace - PI_MARK.length) / 2));
+    const bottomSpace = Math.max(0, markSpace - topSpace - PI_MARK.length);
     const viewportWidth = Math.max(width, this.tui.terminal.columns, PI_GLYPH_WIDTH);
     const markLeft = Math.floor((viewportWidth - PI_GLYPH_WIDTH) / 2);
     const mark = PI_MARK.map((line) => {
