@@ -47,9 +47,14 @@ const EFFECTS: Record<SoundName, Note[]> = {
     { frequency: 523.25, start: 0.08, duration: 0.18, volume: 0.07 },
   ],
   settled: [
-    { frequency: 523.25, start: 0, duration: 0.1, volume: 0.08 },
-    { frequency: 659.25, start: 0.07, duration: 0.1, volume: 0.08 },
-    { frequency: 783.99, start: 0.14, duration: 0.2, volume: 0.07 },
+    { frequency: 261.63, start: 0, duration: 0.42, volume: 0.035 },
+    { frequency: 329.63, start: 0, duration: 0.42, volume: 0.03 },
+    { frequency: 523.25, start: 0, duration: 0.12, volume: 0.08 },
+    { frequency: 659.25, start: 0.1, duration: 0.13, volume: 0.08 },
+    { frequency: 783.99, start: 0.21, duration: 0.15, volume: 0.09 },
+    { frequency: 1046.5, start: 0.34, duration: 0.2, volume: 0.1 },
+    { frequency: 1318.51, start: 0.49, duration: 0.25, volume: 0.09 },
+    { frequency: 1567.98, start: 0.64, duration: 0.5, volume: 0.08 },
   ],
 };
 
