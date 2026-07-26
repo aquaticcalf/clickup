@@ -433,7 +433,8 @@ class HIGEditor extends CustomEditor {
     if (this.chatViewport?.setViewportRows(desiredChatRows)) {
       this.higTui.requestRender()
     }
-    this.chatViewport?.setScreenTop(rowsBeforeChat)
+    // terminal mouse coordinates are 1-based while render rows are 0-based.
+    this.chatViewport?.setScreenTop(Math.max(0, rowsBeforeChat - 1))
     const adjustedRowsBeforeEditor = rowsBeforeChat + (this.chatViewport?.getVisibleRows() ?? 0)
     const availableRows = Math.max(
       0,
