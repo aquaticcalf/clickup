@@ -1,33 +1,34 @@
 import { CustomEditor, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { EditorOptions, EditorTheme, TUI } from "@earendil-works/pi-tui";
+import { truncateToWidth, type EditorOptions, type EditorTheme, type TUI } from "@earendil-works/pi-tui";
 
 const THEME_NAME = "hig";
 const ALT_SCREEN_ON = "\u001b[?1049h\u001b[2J\u001b[H";
 const ALT_SCREEN_OFF = "\u001b[?1049l";
-const FOOTER_ROWS = 3;
-const DEFAULT_WIDGET_ROWS = 1;
-const PI_GLYPH_WIDTH = 31;
-const PI_GLYPH_HEIGHT = 9;
+const FACE_WIDTH = 45;
+const FACE_HEIGHT = 14;
+const REDUCED_MOTION = /^(1|true|yes)$/i.test(process.env.HIG_REDUCED_MOTION ?? "");
 
-type Theme = ReturnType<ExtensionContext["ui"]["getTheme"]>;
+function buildCuteFrame(expression: string): string[] {
+  const rows = Array.from({ length: FACE_HEIGHT }, () => " ".repeat(FACE_WIDTH));
 
-function buildPiAscii(): string[] {
-  const rows = Array.from({ length: PI_GLYPH_HEIGHT }, () => Array(PI_GLYPH_WIDTH).fill(" "));
-  const left = 6;
-  const right = PI_GLYPH_WIDTH - left - 1;
+  const put = (text: string, row: number): void => {
+    const start = Math.max(0, Math.floor((FACE_WIDTH - text.length) / 2));
+    const right = Math.max(0, FACE_WIDTH - start - text.length);
+    rows[row] = " ".repeat(start) + text + " ".repeat(right);
+  };
 
-  // Terminal glyphs form the actual lowercase mathematical π: a straight
-  // overbar with two descending stems. No box, arch, or decorative enclosure.
-  for (let x = left; x <= right; x += 1) rows[0][x] = "━";
-  for (let y = 1; y < PI_GLYPH_HEIGHT; y += 1) {
-    rows[y][left] = "┃";
-    rows[y][right] = "┃";
-  }
+  put(`*:･ﾟ✧*:･ﾟ✧ hi, sam ${expression} ✧ﾟ･: *✧ﾟ･:*`, 6);
+  put("♡ ( =^･ω･^= ) ♡", 8);
 
-  return rows.map((row) => row.join(""));
+  return rows;
 }
 
-const PI_MARK = buildPiAscii();
+const FACE_FRAMES = [
+  buildCuteFrame(">_<"),
+  buildCuteFrame(">_>"),
+  buildCuteFrame(">_<"),
+  buildCuteFrame("U_U"),
+];
 
 function isInteractiveTerminal(): boolean {
   return Boolean(process.stdout.isTTY && process.stdin.isTTY);
@@ -48,88 +49,69 @@ function hasConversation(ctx: ExtensionContext): boolean {
   return ctx.sessionManager.getBranch().some((entry) => entry.type === "message");
 }
 
-function estimateConversationRows(ctx: ExtensionContext, width: number): number {
-  const contentWidth = Math.max(24, width - 8);
-  let rows = 0;
-
-  for (const entry of ctx.sessionManager.getBranch()) {
-    if (entry.type !== "message") continue;
-    const content = "content" in entry.message ? entry.message.content : "";
-    const text = typeof content === "string"
-      ? content
-      : Array.isArray(content)
-        ? content.map((part) => {
-            if (typeof part === "string") return part;
-            if (typeof part === "object" && part !== null && "text" in part) {
-              return typeof part.text === "string" ? part.text : "";
-            }
-            return "";
-          }).join(" ")
-        : "";
-    rows += Math.max(1, Math.ceil(text.length / contentWidth)) + 2;
+function getComponentChildren(component: unknown): unknown[] | undefined {
+  if (typeof component !== "object" || component === null || !("children" in component)) {
+    return undefined;
   }
-
-  return rows;
+  const children = (component as { children?: unknown }).children;
+  return Array.isArray(children) ? children : undefined;
 }
 
 class HIGEditor extends CustomEditor {
-  private readonly ctx: ExtensionContext;
-  private stickySpacerRows: number | undefined;
-  private lastTerminalRows = 0;
-
   constructor(
-    tui: TUI,
+    higTui: TUI,
     theme: EditorTheme,
     keybindings: ConstructorParameters<typeof CustomEditor>[2],
     options: EditorOptions | undefined,
-    ctx: ExtensionContext,
+    private readonly ctx: ExtensionContext,
+    private readonly frameProvider: () => string[],
   ) {
-    super(tui, theme, keybindings, options);
-    this.ctx = ctx;
+    super(higTui, theme, keybindings, options);
+    this.higTui = higTui;
   }
+
+  private readonly higTui: TUI;
 
   override render(width: number): string[] {
     const editorLines = super.render(width);
-    const conversationRows = estimateConversationRows(this.ctx, width);
-    const targetSpacerRows = Math.max(
-      0,
-      this.tui.terminal.rows - editorLines.length - FOOTER_ROWS - DEFAULT_WIDGET_ROWS - conversationRows,
+    const editorContainerIndex = this.higTui.children.findIndex((child) =>
+      getComponentChildren(child)?.includes(this),
     );
-    const emptyLine = "";
+    const rowsBeforeEditor = editorContainerIndex < 0
+      ? 0
+      : this.higTui.children
+          .slice(0, editorContainerIndex)
+          .reduce((rows, child) => rows + child.render(width).length, 0);
+    const rowsAfterEditor = editorContainerIndex < 0
+      ? 0
+      : this.higTui.children
+          .slice(editorContainerIndex + 1)
+          .reduce((rows, child) => rows + child.render(width).length, 0);
+    const availableRows = Math.max(
+      0,
+      this.higTui.terminal.rows - rowsBeforeEditor - rowsAfterEditor - editorLines.length,
+    );
 
-    // Lock the spacer to a one-way layout budget. It may shrink as the chat
-    // grows, but never oscillates upward while the conversation is rendering.
-    // This keeps the editor/footer visually sticky instead of reflowing.
-    if (this.lastTerminalRows !== this.tui.terminal.rows) {
-      this.lastTerminalRows = this.tui.terminal.rows;
-      this.stickySpacerRows = targetSpacerRows;
-    } else if (this.stickySpacerRows === undefined) {
-      this.stickySpacerRows = targetSpacerRows;
-    } else {
-      this.stickySpacerRows = Math.min(this.stickySpacerRows, targetSpacerRows);
-    }
-
-    // Keep the editor/footer at the bottom even after the empty-state mark
-    // disappears. When there is no chat, use that same space for the centered
-    // mark; when chat exists, use the locked spacer below the chat.
     if (hasConversation(this.ctx)) {
-      return [...Array.from({ length: this.stickySpacerRows }, () => emptyLine), ...editorLines];
+      return [...Array.from({ length: availableRows }, () => ""), ...editorLines];
     }
 
-    const markSpace = Math.max(PI_MARK.length, targetSpacerRows);
-    const topSpace = Math.max(0, Math.floor((markSpace - PI_MARK.length) / 2));
-    const bottomSpace = Math.max(0, markSpace - topSpace - PI_MARK.length);
-    const viewportWidth = Math.max(width, this.tui.terminal.columns, PI_GLYPH_WIDTH);
-    const markLeft = Math.floor((viewportWidth - PI_GLYPH_WIDTH) / 2);
-    const mark = PI_MARK.map((line) => {
-      const right = Math.max(0, viewportWidth - markLeft - PI_GLYPH_WIDTH);
-      return `${" ".repeat(markLeft)}${this.ctx.ui.theme.fg("accent", line)}${" ".repeat(right)}`;
+    const face = this.frameProvider();
+    const markSpace = Math.max(face.length, availableRows);
+    const topSpace = Math.max(0, Math.floor((markSpace - face.length) / 2));
+    const bottomSpace = Math.max(0, markSpace - topSpace - face.length);
+    const mark = face.map((line) => {
+      const greeting = line.replace("hi, sam", this.ctx.ui.theme.bold("hi, sam"));
+      const styled = this.ctx.ui.theme.fg("accent", greeting);
+      if (width < FACE_WIDTH) return truncateToWidth(styled, width, "");
+      const left = Math.floor((width - FACE_WIDTH) / 2);
+      return `${" ".repeat(left)}${styled}${" ".repeat(width - left - FACE_WIDTH)}`;
     });
 
     return [
-      ...Array.from({ length: topSpace }, () => emptyLine),
+      ...Array.from({ length: topSpace }, () => ""),
       ...mark,
-      ...Array.from({ length: bottomSpace }, () => emptyLine),
+      ...Array.from({ length: bottomSpace }, () => ""),
       ...editorLines,
     ];
   }
@@ -137,6 +119,9 @@ class HIGEditor extends CustomEditor {
 
 export default function hig(pi: ExtensionAPI): void {
   let inAlternateScreen = false;
+  let animationTimer: ReturnType<typeof setInterval> | undefined;
+  let requestRender: (() => void) | undefined;
+  let frameIndex = 0;
 
   process.once("exit", () => {
     if (inAlternateScreen) leaveAlternateScreen();
@@ -146,17 +131,37 @@ export default function hig(pi: ExtensionAPI): void {
     if (ctx.mode !== "tui") return;
 
     inAlternateScreen = enterAlternateScreen();
-    const theme: Theme = ctx.ui.getTheme(THEME_NAME);
+    const theme = ctx.ui.getTheme(THEME_NAME);
     if (theme) ctx.ui.setTheme(theme);
 
-    ctx.ui.setWidget("hig-empty-state", undefined);
-    ctx.ui.setEditorComponent((tui, editorTheme, keybindings) =>
-      new HIGEditor(tui, editorTheme, keybindings, undefined, ctx),
-    );
+    frameIndex = 0;
+    ctx.ui.setEditorComponent((tui, editorTheme, keybindings) => {
+      requestRender = () => tui.requestRender();
+      return new HIGEditor(
+        tui,
+        editorTheme,
+        keybindings,
+        undefined,
+        ctx,
+        () => FACE_FRAMES[frameIndex],
+      );
+    });
+
+    if (!REDUCED_MOTION) {
+      animationTimer = setInterval(() => {
+        if (!hasConversation(ctx)) {
+          frameIndex = (frameIndex + 1) % FACE_FRAMES.length;
+          requestRender?.();
+        }
+      }, 750);
+    }
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
     if (ctx.mode !== "tui") return;
+    if (animationTimer) clearInterval(animationTimer);
+    animationTimer = undefined;
+    requestRender = undefined;
     ctx.ui.setEditorComponent(undefined);
     if (inAlternateScreen) {
       leaveAlternateScreen();
