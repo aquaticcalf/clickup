@@ -7,6 +7,7 @@ A pnpm workspace and distributable pi package containing independently loadable 
 | Plugin | Location | Purpose |
 |---|---|---|
 | ClickUp | `plugins/clickup/` | Command-gated ClickUp API access with CRUD permissions |
+| Casino Mode | `plugins/casino/` | Optional neon casino visual theme toggled by `/casino` |
 
 More integrations can be added under `plugins/<name>/` without changing the collection architecture.
 
@@ -22,7 +23,7 @@ This uses pi's temporary extension loading. It does not add the package to your 
 
 ## Selective plugin loading
 
-The root package discovers plugin entrypoints with `./plugins/*/index.ts`. To load only selected plugins from a package installation, use a filtered package entry in pi settings:
+The root package discovers plugin entrypoints with `./plugins/*/index.ts` and plugin themes with `./plugins/*/themes/*.json`. To load only selected plugins from a package installation, use a filtered package entry in pi settings:
 
 ```json
 {

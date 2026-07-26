@@ -21,6 +21,9 @@
   "pi": {
     "extensions": [
       "./plugins/*/index.ts"
+    ],
+    "themes": [
+      "./plugins/*/themes/*.json"
     ]
   },
   "peerDependencies": {
