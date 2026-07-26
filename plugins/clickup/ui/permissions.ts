@@ -4,7 +4,8 @@ import { PermissionManager, permissionText } from "../permissions.ts";
 
 export function reportPermissions(ctx: ExtensionContext, manager: PermissionManager, prefix: string): void {
   const current = permissionText(manager.current);
-  ctx.ui.setStatus(CLICKUP_STATUS_KEY, `ClickUp: ${current}`);
+  if (current === "none") ctx.ui.setStatus(CLICKUP_STATUS_KEY, undefined);
+  else ctx.ui.setStatus(CLICKUP_STATUS_KEY, `ClickUp: ${current}`);
   ctx.ui.notify(`${prefix}\nCurrent ClickUp permissions: ${current}`, "info");
 }
 
