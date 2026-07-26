@@ -34,13 +34,40 @@ async function savePersistedState(enabled: boolean): Promise<void> {
 export default function casino(pi: ExtensionAPI): void {
   let enabled = false
   let previousTheme: Theme | undefined
+  let reloadThemeTimer: ReturnType<typeof setTimeout> | undefined
   const sounds = new SoundEngine()
 
   const clearVisuals = (ctx: ExtensionContext): void => {
     if (ctx.mode === "tui") ctx.ui.setWorkingIndicator()
   }
 
+  const applyTheme = (ctx: ExtensionContext): boolean => {
+    const casinoTheme = ctx.ui.getTheme(THEME_NAME)
+    if (!casinoTheme) {
+      ctx.ui.notify("Could not enable Casino Mode: theme unavailable", "error")
+      return false
+    }
+    // Pass the Theme object so Casino remains a temporary overlay and does not
+    // overwrite the user's saved theme setting.
+    const result = ctx.ui.setTheme(casinoTheme)
+    if (!result.success) {
+      ctx.ui.notify(`Could not enable Casino Mode: ${result.error ?? "theme unavailable"}`, "error")
+      return false
+    }
+    return true
+  }
+
+  const setIndicator = (ctx: ExtensionContext): void => {
+    if (ctx.mode !== "tui") return
+    const frames = REDUCED_MOTION
+      ? [ctx.ui.theme.fg("accent", "♦")]
+      : SUITS.map((suit) => ctx.ui.theme.fg("accent", suit))
+    ctx.ui.setWorkingIndicator({ frames, intervalMs: REDUCED_MOTION ? 1000 : 650 })
+  }
+
   const disable = (ctx: ExtensionContext): void => {
+    if (reloadThemeTimer) clearTimeout(reloadThemeTimer)
+    reloadThemeTimer = undefined
     sounds.play("off")
     void sounds.disableAfterQueuedSounds()
     clearVisuals(ctx)
@@ -51,29 +78,13 @@ export default function casino(pi: ExtensionAPI): void {
 
   const enable = (ctx: ExtensionContext): boolean => {
     const originalTheme = ctx.ui.theme
-    const casinoTheme = ctx.ui.getTheme(THEME_NAME)
-    if (!casinoTheme) {
-      ctx.ui.notify("Could not enable Casino Mode: theme unavailable", "error")
-      return false
-    }
-    // Pass the Theme object, not the name: pi persists named theme selections.
-    const result = ctx.ui.setTheme(casinoTheme)
-    if (!result.success) {
-      ctx.ui.notify(`Could not enable Casino Mode: ${result.error ?? "theme unavailable"}`, "error")
-      return false
-    }
+    if (!applyTheme(ctx)) return false
 
     previousTheme = originalTheme
     enabled = true
     sounds.enable()
     sounds.play("on")
-
-    if (ctx.mode === "tui") {
-      const frames = REDUCED_MOTION
-        ? [ctx.ui.theme.fg("accent", "♦")]
-        : SUITS.map((suit) => ctx.ui.theme.fg("accent", suit))
-      ctx.ui.setWorkingIndicator({ frames, intervalMs: REDUCED_MOTION ? 1000 : 650 })
-    }
+    setIndicator(ctx)
     return true
   }
 
@@ -114,6 +125,8 @@ export default function casino(pi: ExtensionAPI): void {
   })
 
   pi.on("session_start", async (_event, ctx) => {
+    if (reloadThemeTimer) clearTimeout(reloadThemeTimer)
+    reloadThemeTimer = undefined
     enabled = false
     previousTheme = undefined
     sounds.stopImmediately()
@@ -121,7 +134,26 @@ export default function casino(pi: ExtensionAPI): void {
     enable(ctx)
   })
 
+  // pi rebuilds extension UI during /reload and other extensions may apply their
+  // startup theme after session_start. Reassert Casino after resource discovery.
+  pi.on("resources_discover", (event, ctx) => {
+    if (!enabled || ctx.mode !== "tui") return
+    if (applyTheme(ctx)) setIndicator(ctx)
+
+    // /reload applies pi's saved theme after resource discovery. Casino is a
+    // temporary overlay, so restore it after that core step completes.
+    if (event.reason === "reload") {
+      if (reloadThemeTimer) clearTimeout(reloadThemeTimer)
+      reloadThemeTimer = setTimeout(() => {
+        reloadThemeTimer = undefined
+        if (enabled && applyTheme(ctx)) setIndicator(ctx)
+      }, 150)
+    }
+  })
+
   pi.on("session_shutdown", (_event, ctx) => {
+    if (reloadThemeTimer) clearTimeout(reloadThemeTimer)
+    reloadThemeTimer = undefined
     if (enabled) {
       sounds.stopImmediately()
       clearVisuals(ctx)
