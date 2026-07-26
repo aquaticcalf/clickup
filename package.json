@@ -2,14 +2,12 @@
   "name": "@aquaticcalf/pi-plugins",
   "version": "0.1.0",
   "description": "A collection of independently loadable pi plugins.",
-  "license": "MIT",
-  "type": "module",
-  "packageManager": "pnpm@11.17.0",
   "keywords": [
-    "pi-package",
     "pi-extension",
+    "pi-package",
     "pi-plugins"
   ],
+  "license": "MIT",
   "files": [
     "plugins",
     "server",
@@ -17,24 +15,17 @@
     "README.md",
     "LICENSE"
   ],
+  "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "server": "node --experimental-strip-types server/src/index.ts",
-    "server:watch": "node --watch --experimental-strip-types server/src/index.ts"
+    "server:watch": "node --watch --experimental-strip-types server/src/index.ts",
+    "postinstall": "vp config --hooks-dir hooks"
   },
-  "pi": {
-    "extensions": [
-      "./plugins/*/index.ts"
-    ],
-    "themes": [
-      "./plugins/*/themes/*.json"
-    ]
-  },
-  "peerDependencies": {
-    "@earendil-works/pi-ai": "catalog:",
-    "@earendil-works/pi-coding-agent": "catalog:",
-    "@earendil-works/pi-tui": "catalog:",
-    "typebox": "catalog:"
+  "dependencies": {
+    "@elysiajs/openapi": "^1.4.15",
+    "elysia": "^1.4.29",
+    "vite-plus": "catalog:"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "catalog:",
@@ -44,8 +35,19 @@
     "typebox": "catalog:",
     "typescript": "catalog:"
   },
-  "dependencies": {
-    "@elysiajs/openapi": "^1.4.15",
-    "elysia": "^1.4.29"
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:",
+    "typebox": "catalog:"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "pi": {
+    "extensions": [
+      "./plugins/*/index.ts"
+    ],
+    "themes": [
+      "./plugins/*/themes/*.json"
+    ]
   }
 }
