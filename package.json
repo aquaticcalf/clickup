@@ -4,17 +4,32 @@
   "description": "A command-gated ClickUp extension for pi with runtime CRUD permissions.",
   "license": "MIT",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "clickup"],
-  "files": ["extensions", "README.md", "LICENSE"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "clickup"
+  ],
+  "files": [
+    "extensions",
+    "README.md",
+    "LICENSE"
+  ],
   "pi": {
-    "extensions": ["./extensions/clickup.ts"]
+    "extensions": [
+      "./extensions/clickup.ts"
+    ]
   },
   "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
     "typebox": "*"
   },
   "dependencies": {
     "keytar": "^7.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
   }
 }
