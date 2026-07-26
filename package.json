@@ -12,12 +12,15 @@
   ],
   "files": [
     "plugins",
+    "server",
     "prompts",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "server": "node --experimental-strip-types server/src/index.ts",
+    "server:watch": "node --watch --experimental-strip-types server/src/index.ts"
   },
   "pi": {
     "extensions": [
@@ -40,5 +43,9 @@
     "@types/node": "catalog:",
     "typebox": "catalog:",
     "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@elysiajs/openapi": "^1.4.15",
+    "elysia": "^1.4.29"
   }
 }
