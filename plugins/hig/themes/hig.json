@@ -63,9 +63,9 @@
     "syntaxPunctuation": "textSecondary",
     "thinkingOff": "textDim",
     "thinkingMinimal": "blueMuted",
-    "thinkingLow": "blue",
+    "thinkingLow": "blueMuted",
     "thinkingMedium": "green",
-    "thinkingHigh": "amber",
+    "thinkingHigh": "blue",
     "thinkingXhigh": "violet",
     "thinkingMax": "red",
     "bashMode": "amber"
