@@ -1,14 +1,14 @@
 {
-  "name": "pi-clickup-access",
+  "name": "@aquaticcalf/pi-plugins",
   "version": "0.1.0",
-  "description": "A command-gated ClickUp extension for pi with runtime CRUD permissions.",
+  "description": "A collection of independently loadable pi plugins.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.17.0",
   "keywords": [
     "pi-package",
     "pi-extension",
-    "clickup"
+    "pi-plugins"
   ],
   "files": [
     "plugins",
@@ -24,13 +24,10 @@
     ]
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*",
-    "typebox": "*"
-  },
-  "dependencies": {
-    "keytar": "catalog:"
+    "@earendil-works/pi-ai": "catalog:",
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:",
+    "typebox": "catalog:"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "catalog:",

@@ -1,21 +1,14 @@
-# pi-clickup-access
+# @aquaticcalf/pi-plugins
 
-A command-gated ClickUp extension for pi. ClickUp access is disabled when a session starts and is granted only by explicit user commands.
+A pnpm workspace and distributable pi package containing independently loadable plugins.
 
-## Commands
+## Plugins
 
-```text
-/clickup-start       # grant all CRUD permissions
-/clickup-start r     # grant read permission
-/clickup-start rc    # grant read and create permissions
-/clickup-stop        # revoke all permissions
-/clickup-stop u      # revoke update permission only
-/clickup-logout       # revoke all access and delete the saved credential
-```
+| Plugin | Location | Purpose |
+|---|---|---|
+| ClickUp | `plugins/clickup/` | Command-gated ClickUp API access with CRUD permissions |
 
-Permissions are additive on start and subtractive on stop. Every access command prints the current permissions. `/clickup-stop` is an emergency local kill switch and never requires authentication.
-
-When starting access without a saved credential, the extension opens a masked popup for a ClickUp API/personal token. Credentials are stored with `keytar` in the operating system credential store and are never included in tool arguments or session messages.
+More integrations can be added under `plugins/<name>/` without changing the collection architecture.
 
 ## Try without cloning or permanently installing
 
@@ -25,65 +18,11 @@ Run the published GitHub package for one pi session:
 pi -e git:github.com/aquaticcalf/clickup@master
 ```
 
-This uses pi's temporary extension loading. It does not add the package to your pi settings.
-
-When pi starts, try:
-
-```text
-/clickup-start
-```
-
-The empty command grants all permissions and opens the API-key popup if needed. Then use `/clickup-stop` to revoke everything. Use `/clickup-logout` to revoke access and delete the saved credential.
-
-## Install permanently
-
-From GitHub:
-
-```bash
-pi install git:github.com/aquaticcalf/clickup@master
-```
-
-From a local checkout:
-
-```bash
-npm install
-pi install .
-```
-
-For a local one-session test from an existing checkout:
-
-```bash
-pi -e .
-# or
-pi -e ./plugins/clickup/index.ts
-```
-
-After a permanent install, restart pi or run `/reload`.
-
-## pnpm workspace development
-
-This repository is a pnpm workspace using a shared catalog for Pi SDK packages and runtime/dev dependencies:
-
-```bash
-pnpm install
-pnpm typecheck
-```
-
-Pi uses npm by default when installing Git packages. To make Pi use this workspace's pnpm setup, add this to `~/.pi/agent/settings.json`:
-
-```json
-{
-  "npmCommand": ["pnpm"]
-}
-```
-
-A new terminal may be needed after installing pnpm so `pnpm` is on `PATH`. The workspace allows the `keytar` native build and keeps other dependency build scripts disabled.
+This uses pi's temporary extension loading. It does not add the package to your pi settings. See each plugin's README for its commands.
 
 ## Selective plugin loading
 
-This repository is a collection of independently loadable plugins. The root package discovers plugin entrypoints with `./plugins/*/index.ts`.
-
-To load only selected plugins from a package installation, use a filtered package entry in pi settings:
+The root package discovers plugin entrypoints with `./plugins/*/index.ts`. To load only selected plugins from a package installation, use a filtered package entry in pi settings:
 
 ```json
 {
@@ -98,28 +37,47 @@ To load only selected plugins from a package installation, use a filtered packag
 
 You can also use `pi config` to enable or disable individual extensions.
 
-## Structure
+## Permanent installation
 
-```text
-plugins/
-└── clickup/
-    ├── index.ts                 # pi registration and lifecycle orchestration
-    ├── permissions.ts           # CRUD parsing, state, and request cancellation
-    ├── api-schema.ts            # ClickUp tool schema
-    ├── api/client.ts            # URL validation and HTTP transport
-    ├── auth/credential-store.ts # OS credential-store integration
-    ├── auth/prompt.ts           # masked TUI credential prompt
-    ├── ui/permissions.ts        # status and permission notifications
-    ├── constants.ts
-    └── types.ts
+```bash
+pi install git:github.com/aquaticcalf/clickup@master
 ```
 
-## Notes
+From a local checkout:
 
-The extension exposes a generic `clickup_request` tool throughout the session for stable provider/tool-schema caching. It is unusable while stopped: both the tool executor and `tool_call` gate enforce the current permission state.
+```bash
+pnpm install
+pi install .
+```
 
-`/clickup-logout` additionally clears the in-memory key and deletes the saved operating-system credential. If `CLICKUP_API_KEY` is set externally, that environment credential must be unset separately.
+## pnpm workspace development
 
-After every access change, the extension adds a hidden, non-system conversation message containing the authoritative current state. This lets the model know whether ClickUp is active without changing the system prompt or repeatedly invalidating its stable cache prefix.
+This repository uses pnpm workspaces and a shared catalog for all dependency versions, including Pi SDK packages:
 
-CRUD permissions map to HTTP methods: `r` = GET, `c` = POST, `u` = PUT/PATCH, and `d` = DELETE. The token itself may have broad ClickUp API capabilities; the extension enforces the runtime permission boundary.
+```bash
+pnpm install
+pnpm typecheck
+```
+
+Pi uses npm by default when installing Git packages. To make Pi use pnpm, add this to `~/.pi/agent/settings.json`:
+
+```json
+{
+  "npmCommand": ["pnpm"]
+}
+```
+
+The `packageManager` field pins the workspace to pnpm 11.17.0. A new terminal may be needed after installing pnpm so it is on `PATH`.
+
+## Adding a plugin
+
+Create a new workspace package:
+
+```text
+plugins/my-plugin/
+├── package.json
+├── README.md
+└── index.ts
+```
+
+Add its entrypoint under `plugins/my-plugin/index.ts`. The root Pi manifest discovers it automatically, while package filters let users choose which plugins load.
