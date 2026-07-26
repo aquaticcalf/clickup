@@ -10,6 +10,7 @@ A pnpm workspace and distributable pi package containing independently loadable 
 | GitHub | `plugins/github/` | Settings-style GitHub PR, checks, issue, and repository workflow |
 | Casino Mode | `plugins/casino/` | Optional refined casino-lounge theme toggled by `/casino` |
 | HIG | `plugins/hig/` | Always-loaded calm, readable visual baseline |
+| Prompt loader | `plugins/prompts/` | Appends repository text prompts to the system prompt |
 
 More integrations can be added under `plugins/<name>/` without changing the collection architecture.
 
