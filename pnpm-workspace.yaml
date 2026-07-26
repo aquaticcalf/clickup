@@ -5,6 +5,7 @@ allowBuilds:
   '@google/genai': false
   keytar: true
   protobufjs: false
+  speaker: true
 
 catalog:
   "@earendil-works/pi-ai": "^0.82.1"
@@ -12,6 +13,7 @@ catalog:
   "@earendil-works/pi-tui": "^0.82.1"
   "@types/node": "^26.1.1"
   keytar: "^7.9.0"
+  speaker: "^0.5.5"
   typebox: "^1.3.8"
   typescript: "^7.0.2"
 
