@@ -74,6 +74,8 @@ function estimateConversationRows(ctx: ExtensionContext, width: number): number 
 
 class HIGEditor extends CustomEditor {
   private readonly ctx: ExtensionContext;
+  private stickySpacerRows: number | undefined;
+  private lastTerminalRows = 0;
 
   constructor(
     tui: TUI,
@@ -89,20 +91,32 @@ class HIGEditor extends CustomEditor {
   override render(width: number): string[] {
     const editorLines = super.render(width);
     const conversationRows = estimateConversationRows(this.ctx, width);
-    const available = Math.max(
+    const targetSpacerRows = Math.max(
       0,
       this.tui.terminal.rows - editorLines.length - FOOTER_ROWS - DEFAULT_WIDGET_ROWS - conversationRows,
     );
     const emptyLine = "";
 
-    // Keep the editor/footer at the bottom even after the empty-state mark
-    // disappears. When there is no chat, use that same space for the centered
-    // mark; when chat exists, use it as quiet breathing room below the chat.
-    if (hasConversation(this.ctx)) {
-      return [...Array.from({ length: available }, () => emptyLine), ...editorLines];
+    // Lock the spacer to a one-way layout budget. It may shrink as the chat
+    // grows, but never oscillates upward while the conversation is rendering.
+    // This keeps the editor/footer visually sticky instead of reflowing.
+    if (this.lastTerminalRows !== this.tui.terminal.rows) {
+      this.lastTerminalRows = this.tui.terminal.rows;
+      this.stickySpacerRows = targetSpacerRows;
+    } else if (this.stickySpacerRows === undefined) {
+      this.stickySpacerRows = targetSpacerRows;
+    } else {
+      this.stickySpacerRows = Math.min(this.stickySpacerRows, targetSpacerRows);
     }
 
-    const markSpace = Math.max(PI_MARK.length, available);
+    // Keep the editor/footer at the bottom even after the empty-state mark
+    // disappears. When there is no chat, use that same space for the centered
+    // mark; when chat exists, use the locked spacer below the chat.
+    if (hasConversation(this.ctx)) {
+      return [...Array.from({ length: this.stickySpacerRows }, () => emptyLine), ...editorLines];
+    }
+
+    const markSpace = Math.max(PI_MARK.length, targetSpacerRows);
     const topSpace = Math.max(0, Math.floor((markSpace - PI_MARK.length) / 2));
     const bottomSpace = Math.max(0, markSpace - topSpace - PI_MARK.length);
     const viewportWidth = Math.max(width, this.tui.terminal.columns, PI_GLYPH_WIDTH);
