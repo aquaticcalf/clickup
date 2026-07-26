@@ -4,8 +4,8 @@ import * as QRCode from "qrcode";
 import { ServerManager } from "./manager.ts";
 
 function statusText(status: Awaited<ReturnType<ServerManager["status"]>>): string {
-  if (!status.running) return "Pi host: stopped";
-  return `Pi host: running at ${status.url}${status.pid ? ` (pid ${status.pid})` : ""}`;
+  if (!status.running) return `Pi host: stopped${status.enabled ? " (automatic startup enabled)" : ""}`;
+  return `Pi host: running at ${status.url}${status.pid ? ` (pid ${status.pid})` : ""}${status.enabled ? " (automatic startup enabled)" : ""}`;
 }
 
 async function showPairingQr(ctx: ExtensionCommandContext, payload: string, endpoint: string): Promise<void> {
@@ -79,9 +79,24 @@ export default function serverPlugin(pi: ExtensionAPI): void {
           return;
         }
 
-        if (command === "stop") {
+        if (command === "enable") {
+          if (!(await manager.hasEntrypoint())) {
+            ctx.ui.notify("Pi host server files are not available in this installation.", "error");
+            return;
+          }
+
+          const result = await manager.enable();
+          if (result.pairingPayload) await showPairingQr(ctx, result.pairingPayload, result.status.url);
+          ctx.ui.notify("Pi host enabled and configured to start automatically.", "info");
+          return;
+        }
+
+        if (command === "disable" || command === "stop") {
           const stopped = await manager.stop();
-          ctx.ui.notify(stopped ? "Pi host stopped." : "Pi host was not running.", "info");
+          ctx.ui.notify(
+            stopped ? "Pi host stopped and automatic startup disabled." : "Pi host was not running.",
+            "info",
+          );
           return;
         }
 
@@ -96,7 +111,7 @@ export default function serverPlugin(pi: ExtensionAPI): void {
         }
 
         if (command !== "status") {
-          ctx.ui.notify("Usage: /server start | stop | status | logout", "warning");
+          ctx.ui.notify("Usage: /server start | enable | stop | disable | status | logout", "warning");
           return;
         }
 

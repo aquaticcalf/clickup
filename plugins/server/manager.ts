@@ -11,9 +11,10 @@ import {
   STATE_FILE,
 } from "./constants.ts";
 import { CredentialStore } from "./auth/credential-store.ts";
+import { DaemonService } from "./service.ts";
 
 const execFileAsync = promisify(execFile);
-const SERVER_ENTRYPOINT = fileURLToPath(new URL("../../server/src/index.ts", import.meta.url));
+const DAEMON_ENTRYPOINT = fileURLToPath(new URL("./daemon.ts", import.meta.url));
 
 interface ServerState {
   pid: number;
@@ -24,6 +25,7 @@ interface ServerState {
 
 export interface ServerStatus {
   running: boolean;
+  enabled: boolean;
   pid?: number;
   host: string;
   port: number;
@@ -51,6 +53,7 @@ function isProcessAlive(pid: number): boolean {
 
 export class ServerManager {
   private readonly credentials = new CredentialStore();
+  private readonly service = new DaemonService();
   private sessionToken: string | undefined;
   private readonly host = process.env.PI_SERVER_HOST || DEFAULT_HOST;
   private readonly port = configuredPort();
@@ -95,17 +98,41 @@ export class ServerManager {
     const state = await this.loadState();
     const token = this.sessionToken ?? (await this.credentials.load());
     const healthy = await this.health(token);
+    const enabled = await this.service.isInstalled();
 
     if (state && !isProcessAlive(state.pid) && !healthy) await this.removeState();
 
     return {
       running: healthy,
+      enabled,
       pid: state?.pid,
       host: this.host,
       port: this.port,
       url: this.publicUrl,
       stateFile: this.stateFile,
     };
+  }
+
+  private async ensureToken(): Promise<{ token: string; stored: boolean; fresh: boolean }> {
+    const saved = this.sessionToken ?? (await this.credentials.load());
+    if (saved) {
+      this.sessionToken = saved;
+      return { token: saved, stored: true, fresh: false };
+    }
+
+    const token = randomBytes(48).toString("base64url");
+    this.sessionToken = token;
+    const stored = await this.credentials.save(token);
+    return { token, stored, fresh: true };
+  }
+
+  private pairingPayload(token: string): string {
+    return JSON.stringify({
+      type: "pi-host-pairing",
+      version: 1,
+      endpoint: this.publicUrl,
+      token,
+    });
   }
 
   async start(): Promise<{
@@ -115,49 +142,48 @@ export class ServerManager {
   }> {
     const existing = await this.status();
     if (existing.running) {
+      const token = this.sessionToken ?? (await this.credentials.load());
       return {
         status: existing,
-        credentialStored: true,
-        pairingPayload: "",
+        credentialStored: Boolean(token),
+        pairingPayload: token ? this.pairingPayload(token) : "",
       };
     }
 
-    const token = randomBytes(48).toString("base64url");
-    this.sessionToken = token;
-    const credentialStored = await this.credentials.save(token);
-    const child = spawn(process.execPath, ["--experimental-strip-types", SERVER_ENTRYPOINT], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-      env: {
-        ...process.env,
-        PI_SERVER_HOST: this.host,
-        PI_SERVER_PORT: String(this.port),
-        PI_SERVER_AUTH_TOKEN: token,
-      },
-    });
+    const auth = await this.ensureToken();
+    if (existing.enabled) {
+      await this.service.start();
+      await this.removeState();
+    } else {
+      const child = spawn(process.execPath, ["--experimental-strip-types", DAEMON_ENTRYPOINT], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+        env: {
+          ...process.env,
+          PI_SERVER_HOST: this.host,
+          PI_SERVER_PORT: String(this.port),
+          PI_SERVER_AUTH_TOKEN: auth.token,
+        },
+      });
 
-    if (!child.pid) throw new Error("server process did not provide a pid");
-    child.unref();
+      if (!child.pid) throw new Error("server process did not provide a pid");
+      child.unref();
 
-    await this.saveState({
-      pid: child.pid,
-      host: this.host,
-      port: this.port,
-      startedAt: new Date().toISOString(),
-    });
+      await this.saveState({
+        pid: child.pid,
+        host: this.host,
+        port: this.port,
+        startedAt: new Date().toISOString(),
+      });
+    }
 
     for (let attempt = 0; attempt < 30; attempt += 1) {
-      if (await this.health(token)) {
+      if (await this.health(auth.token)) {
         return {
           status: await this.status(),
-          credentialStored,
-          pairingPayload: JSON.stringify({
-            type: "pi-host-pairing",
-            version: 1,
-            endpoint: this.publicUrl,
-            token,
-          }),
+          credentialStored: auth.stored,
+          pairingPayload: this.pairingPayload(auth.token),
         };
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -167,9 +193,50 @@ export class ServerManager {
     throw new Error("server process started but did not become healthy");
   }
 
+  async enable(): Promise<{
+    status: ServerStatus;
+    credentialStored: boolean;
+    pairingPayload: string;
+  }> {
+    const auth = await this.ensureToken();
+    if (!auth.stored) {
+      this.sessionToken = undefined;
+      throw new Error("the auth token could not be saved; automatic startup is unavailable");
+    }
+
+    const existing = await this.status();
+    try {
+      await this.service.install();
+      if (!existing.running) await this.service.start();
+      await this.removeState();
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        if (await this.health(auth.token)) {
+          return {
+            status: await this.status(),
+            credentialStored: true,
+            pairingPayload: this.pairingPayload(auth.token),
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      await this.service.uninstall();
+      throw error;
+    }
+
+    await this.service.uninstall();
+    throw new Error("automatic server process started but did not become healthy");
+  }
+
   async stop(): Promise<boolean> {
+    const enabled = await this.service.isInstalled();
+    if (enabled) await this.service.uninstall();
+
     const state = await this.loadState();
-    if (!state) return false;
+    if (!state) {
+      this.sessionToken = undefined;
+      return enabled;
+    }
 
     if (isProcessAlive(state.pid)) {
       try {
@@ -204,7 +271,7 @@ export class ServerManager {
 
   async hasEntrypoint(): Promise<boolean> {
     try {
-      await access(SERVER_ENTRYPOINT);
+      await access(DAEMON_ENTRYPOINT);
       return true;
     } catch {
       return false;
