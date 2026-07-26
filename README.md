@@ -15,7 +15,7 @@ More integrations can be added under `plugins/<name>/` without changing the coll
 Run the published GitHub package for one pi session:
 
 ```bash
-pi -e git:github.com/aquaticcalf/clickup@master
+pi -e git:github.com/aquaticcalf/pi-plugins@master
 ```
 
 This uses pi's temporary extension loading. It does not add the package to your pi settings. See each plugin's README for its commands.
@@ -28,7 +28,7 @@ The root package discovers plugin entrypoints with `./plugins/*/index.ts`. To lo
 {
   "packages": [
     {
-      "source": "git:github.com/aquaticcalf/clickup@master",
+      "source": "git:github.com/aquaticcalf/pi-plugins@master",
       "extensions": ["plugins/clickup/index.ts"]
     }
   ]
@@ -40,7 +40,7 @@ You can also use `pi config` to enable or disable individual extensions.
 ## Permanent installation
 
 ```bash
-pi install git:github.com/aquaticcalf/clickup@master
+pi install git:github.com/aquaticcalf/pi-plugins@master
 ```
 
 From a local checkout:
