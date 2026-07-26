@@ -95,8 +95,12 @@ async function getKeytar(): Promise<{
   getPassword(service: string, account: string): Promise<string | null>;
   setPassword(service: string, account: string, password: string): Promise<void>;
 }> {
-  const module = await import("keytar");
-  return module;
+  const imported = await import("keytar");
+  const module = imported.default ?? imported;
+  return module as {
+    getPassword(service: string, account: string): Promise<string | null>;
+    setPassword(service: string, account: string, password: string): Promise<void>;
+  };
 }
 
 async function loadStoredApiKey(): Promise<string | undefined> {
