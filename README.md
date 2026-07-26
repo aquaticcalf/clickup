@@ -18,7 +18,15 @@ More integrations can be added under `plugins/<name>/` without changing the coll
 
 ## Try without cloning or permanently installing
 
-This package uses pnpm's `catalog:` protocol. npm cannot parse that protocol, and pi uses npm by default. Configure pi to use pnpm before running the commands below:
+This package uses pnpm's `catalog:` protocol. npm cannot parse that protocol, and pi uses npm by default. Configure pi to use pnpm before running the commands below.
+
+To set this automatically while preserving your other pi settings, run this once:
+
+```bash
+node -e "const fs=require('fs'),path=require('path'),file=path.join(process.env.HOME||process.env.USERPROFILE,'.pi','agent','settings.json');fs.mkdirSync(path.dirname(file),{recursive:true});const settings=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):{};settings.npmCommand=['pnpm'];fs.writeFileSync(file,JSON.stringify(settings,null,2)+String.fromCharCode(10))"
+```
+
+This adds the following to `~/.pi/agent/settings.json`:
 
 ```json
 {
@@ -26,7 +34,7 @@ This package uses pnpm's `catalog:` protocol. npm cannot parse that protocol, an
 }
 ```
 
-Add this to `~/.pi/agent/settings.json`, then run the published GitHub package for one pi session:
+Then run the published GitHub package for one pi session:
 
 ```bash
 pi -e git:github.com/aquaticcalf/pi-plugins@master
