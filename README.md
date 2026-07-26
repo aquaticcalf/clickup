@@ -7,7 +7,7 @@ A pnpm workspace and distributable pi package containing independently loadable 
 | Plugin | Location | Purpose |
 |---|---|---|
 | ClickUp | `plugins/clickup/` | Command-gated ClickUp API access with CRUD permissions |
-| Casino Mode | `plugins/casino/` | Optional neon casino visual theme toggled by `/casino` |
+| Casino Mode | `plugins/casino/` | Optional refined casino-lounge theme toggled by `/casino` |
 
 More integrations can be added under `plugins/<name>/` without changing the collection architecture.
 

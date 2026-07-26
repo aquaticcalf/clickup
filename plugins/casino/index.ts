@@ -2,24 +2,18 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 const THEME_NAME = "casino";
 const STATUS_KEY = "casino-mode";
-const WIDGET_KEY = "casino-mode-widget";
-const SUIT_FRAMES = ["♠ ♥ ♦ ♣", "♥ ♦ ♣ ♠", "♦ ♣ ♠ ♥", "♣ ♠ ♥ ♦"];
+const SUITS = ["♠", "♥", "♦", "♣"];
+const REDUCED_MOTION = /^(1|true|yes)$/i.test(process.env.CASINO_REDUCED_MOTION ?? "");
+
+type Theme = ReturnType<ExtensionContext["ui"]["getTheme"]>;
 
 export default function casino(pi: ExtensionAPI): void {
   let enabled = false;
-  let previousTheme: ReturnType<ExtensionContext["ui"]["getTheme"]> | undefined;
-  let animation: ReturnType<typeof setInterval> | undefined;
+  let previousTheme: Theme | undefined;
 
   const clearVisuals = (ctx: ExtensionContext): void => {
-    if (animation) {
-      clearInterval(animation);
-      animation = undefined;
-    }
     ctx.ui.setStatus(STATUS_KEY, undefined);
-    if (ctx.mode === "tui") {
-      ctx.ui.setWidget(WIDGET_KEY, undefined);
-      ctx.ui.setWorkingIndicator();
-    }
+    if (ctx.mode === "tui") ctx.ui.setWorkingIndicator();
   };
 
   const disable = (ctx: ExtensionContext): void => {
@@ -29,18 +23,8 @@ export default function casino(pi: ExtensionAPI): void {
     enabled = false;
   };
 
-  const renderVisuals = (ctx: ExtensionContext, frameIndex: number): void => {
-    const frame = SUIT_FRAMES[frameIndex % SUIT_FRAMES.length];
-    const theme = ctx.ui.theme;
-    ctx.ui.setStatus(STATUS_KEY, theme.fg("accent", `🎰 CASINO MODE ${frame}`));
-
-    if (ctx.mode === "tui") {
-      ctx.ui.setWidget(WIDGET_KEY, [
-        theme.fg("accent", `╔══ ${frame} ══╗`),
-        theme.fg("warning", "║  HIGH-STAKES CODE GENERATION  ║"),
-        theme.fg("accent", "╚══════════════════════════════╝"),
-      ]);
-    }
+  const updateStatus = (ctx: ExtensionContext): void => {
+    ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("accent", "CASINO · ON  ♦"));
   };
 
   const enable = (ctx: ExtensionContext): boolean => {
@@ -51,33 +35,27 @@ export default function casino(pi: ExtensionAPI): void {
       return false;
     }
 
-    previousTheme = previousTheme ?? originalTheme;
+    previousTheme = originalTheme;
     enabled = true;
+    updateStatus(ctx);
 
     if (ctx.mode === "tui") {
-      ctx.ui.setWorkingIndicator({
-        frames: SUIT_FRAMES.map((frame) => ctx.ui.theme.fg("accent", frame)),
-        intervalMs: 160,
-      });
+      const frames = REDUCED_MOTION
+        ? [ctx.ui.theme.fg("accent", "♦")]
+        : SUITS.map((suit) => ctx.ui.theme.fg("accent", suit));
+      ctx.ui.setWorkingIndicator({ frames, intervalMs: REDUCED_MOTION ? 1000 : 650 });
     }
-
-    let frameIndex = 0;
-    renderVisuals(ctx, frameIndex);
-    animation = setInterval(() => {
-      frameIndex += 1;
-      renderVisuals(ctx, frameIndex);
-    }, 420);
     return true;
   };
 
   pi.registerCommand("casino", {
-    description: "Toggle the neon casino visual theme",
+    description: "Toggle the refined casino visual theme",
     handler: async (_args, ctx) => {
       if (enabled) {
         disable(ctx);
-        ctx.ui.notify("Casino Mode off. House lights restored.", "info");
+        ctx.ui.notify("Casino mode off", "info");
       } else if (enable(ctx)) {
-        ctx.ui.notify("Casino Mode on. Place your bets on the next generation.", "info");
+        ctx.ui.notify("Casino mode on", "info");
       }
     },
   });
@@ -85,7 +63,6 @@ export default function casino(pi: ExtensionAPI): void {
   pi.on("session_start", () => {
     enabled = false;
     previousTheme = undefined;
-    animation = undefined;
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
