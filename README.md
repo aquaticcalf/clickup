@@ -60,6 +60,25 @@ pi -e ./plugins/clickup/index.ts
 
 After a permanent install, restart pi or run `/reload`.
 
+## pnpm workspace development
+
+This repository is a pnpm workspace using a shared catalog for Pi SDK packages and runtime/dev dependencies:
+
+```bash
+pnpm install
+pnpm typecheck
+```
+
+Pi uses npm by default when installing Git packages. To make Pi use this workspace's pnpm setup, add this to `~/.pi/agent/settings.json`:
+
+```json
+{
+  "npmCommand": ["pnpm"]
+}
+```
+
+A new terminal may be needed after installing pnpm so `pnpm` is on `PATH`. The workspace allows the `keytar` native build and keeps other dependency build scripts disabled.
+
 ## Selective plugin loading
 
 This repository is a collection of independently loadable plugins. The root package discovers plugin entrypoints with `./plugins/*/index.ts`.
