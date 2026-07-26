@@ -27,4 +27,16 @@ export class CredentialStore {
       // Keep the credential available for this session if the OS store is unavailable.
     }
   }
+
+  async delete(): Promise<boolean> {
+    try {
+      return await (await getKeytar()).deletePassword(KEYTAR_SERVICE, KEYTAR_ACCOUNT);
+    } catch {
+      return false;
+    }
+  }
+
+  hasEnvironmentCredential(): boolean {
+    return Boolean(process.env.CLICKUP_API_KEY?.trim());
+  }
 }

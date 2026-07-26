@@ -79,6 +79,30 @@ export default function clickup(pi: ExtensionAPI): void {
     },
   });
 
+  pi.registerCommand("clickup-logout", {
+    description: "Stop ClickUp access and delete the saved API key. Does not require auth.",
+    handler: async (_args, ctx) => {
+      permissions.reset();
+      apiKey = undefined;
+      const deleted = await credentials.delete();
+      const environmentCredential = credentials.hasEnvironmentCredential();
+      const storageMessage = deleted
+        ? "The saved operating-system credential was deleted."
+        : "No saved operating-system credential was deleted.";
+      const environmentMessage = environmentCredential
+        ? " CLICKUP_API_KEY is still set externally and must be unset separately."
+        : "";
+
+      ctx.ui.notify(`ClickUp logged out. ${storageMessage}${environmentMessage}`, "info");
+      reportPermissions(ctx, permissions, "ClickUp permission status:");
+      publishPermissionsToModel(
+        pi,
+        permissions,
+        "Credential state: LOGGED OUT. The next /clickup-start requires authentication again.",
+      );
+    },
+  });
+
   // Protects against stale model calls after clickup-stop.
   pi.on("tool_call", async (event) => {
     const toolEvent = event as { toolName?: string; input?: Record<string, unknown> };

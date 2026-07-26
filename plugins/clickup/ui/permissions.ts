@@ -13,7 +13,11 @@ export function reportPermissions(ctx: ExtensionContext, manager: PermissionMana
  * prompt. This keeps the stable system/tool prefix cacheable while making the
  * latest permission state available to the model on its next turn.
  */
-export function publishPermissionsToModel(pi: ExtensionAPI, manager: PermissionManager): void {
+export function publishPermissionsToModel(
+  pi: ExtensionAPI,
+  manager: PermissionManager,
+  note?: string,
+): void {
   const current = permissionText(manager.current);
   const enabled = current !== "none";
   const guidance = enabled
@@ -28,6 +32,7 @@ export function publishPermissionsToModel(pi: ExtensionAPI, manager: PermissionM
         `Status: ${enabled ? "ACTIVE" : "STOPPED"}`,
         `CRUD permissions: ${current}`,
         guidance,
+        ...(note ? [note] : []),
       ].join("\n"),
       display: false,
       details: { permissions: current, active: enabled },

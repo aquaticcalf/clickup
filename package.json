@@ -10,13 +10,13 @@
     "clickup"
   ],
   "files": [
-    "extensions",
+    "plugins",
     "README.md",
     "LICENSE"
   ],
   "pi": {
     "extensions": [
-      "./extensions/clickup"
+      "./plugins/*/index.ts"
     ]
   },
   "peerDependencies": {

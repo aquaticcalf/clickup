@@ -10,9 +10,10 @@ A command-gated ClickUp extension for pi. ClickUp access is disabled when a sess
 /clickup-start rc    # grant read and create permissions
 /clickup-stop        # revoke all permissions
 /clickup-stop u      # revoke update permission only
+/clickup-logout       # revoke all access and delete the saved credential
 ```
 
-Permissions are additive on start and subtractive on stop. Every start/stop command prints the current permissions. `/clickup-stop` is an emergency local kill switch and never requires authentication.
+Permissions are additive on start and subtractive on stop. Every access command prints the current permissions. `/clickup-stop` is an emergency local kill switch and never requires authentication.
 
 When starting access without a saved credential, the extension opens a masked popup for a ClickUp API/personal token. Credentials are stored with `keytar` in the operating system credential store and are never included in tool arguments or session messages.
 
@@ -32,7 +33,7 @@ When pi starts, try:
 /clickup-start
 ```
 
-The empty command grants all permissions and opens the API-key popup if needed. Then use `/clickup-stop` to revoke everything.
+The empty command grants all permissions and opens the API-key popup if needed. Then use `/clickup-stop` to revoke everything. Use `/clickup-logout` to revoke access and delete the saved credential.
 
 ## Install permanently
 
@@ -54,29 +55,51 @@ For a local one-session test from an existing checkout:
 ```bash
 pi -e .
 # or
-pi -e ./extensions/clickup/index.ts
+pi -e ./plugins/clickup/index.ts
 ```
 
 After a permanent install, restart pi or run `/reload`.
 
+## Selective plugin loading
+
+This repository is a collection of independently loadable plugins. The root package discovers plugin entrypoints with `./plugins/*/index.ts`.
+
+To load only selected plugins from a package installation, use a filtered package entry in pi settings:
+
+```json
+{
+  "packages": [
+    {
+      "source": "git:github.com/aquaticcalf/clickup@master",
+      "extensions": ["plugins/clickup/index.ts"]
+    }
+  ]
+}
+```
+
+You can also use `pi config` to enable or disable individual extensions.
+
 ## Structure
 
 ```text
-extensions/clickup/
-├── index.ts                 # pi registration and lifecycle orchestration
-├── permissions.ts           # CRUD parsing, state, and request cancellation
-├── api-schema.ts            # ClickUp tool schema
-├── api/client.ts            # URL validation and HTTP transport
-├── auth/credential-store.ts # OS credential-store integration
-├── auth/prompt.ts           # masked TUI credential prompt
-├── ui/permissions.ts        # status and permission notifications
-├── constants.ts
-└── types.ts
+plugins/
+└── clickup/
+    ├── index.ts                 # pi registration and lifecycle orchestration
+    ├── permissions.ts           # CRUD parsing, state, and request cancellation
+    ├── api-schema.ts            # ClickUp tool schema
+    ├── api/client.ts            # URL validation and HTTP transport
+    ├── auth/credential-store.ts # OS credential-store integration
+    ├── auth/prompt.ts           # masked TUI credential prompt
+    ├── ui/permissions.ts        # status and permission notifications
+    ├── constants.ts
+    └── types.ts
 ```
 
 ## Notes
 
 The extension exposes a generic `clickup_request` tool throughout the session for stable provider/tool-schema caching. It is unusable while stopped: both the tool executor and `tool_call` gate enforce the current permission state.
+
+`/clickup-logout` additionally clears the in-memory key and deletes the saved operating-system credential. If `CLICKUP_API_KEY` is set externally, that environment credential must be unset separately.
 
 After every access change, the extension adds a hidden, non-system conversation message containing the authoritative current state. This lets the model know whether ClickUp is active without changing the system prompt or repeatedly invalidating its stable cache prefix.
 
