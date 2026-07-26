@@ -46,6 +46,8 @@ function runProcess(command: string, args: string[], input: Buffer): Promise<boo
   });
 }
 
+let lastFallbackBellAt = 0;
+
 async function playFallback(wav: Buffer): Promise<void> {
   if (process.platform === "win32") {
     const script = "$m=[IO.MemoryStream]::new();[Console]::OpenStandardInput().CopyTo($m);$m.Position=0;$p=[System.Media.SoundPlayer]::new($m);$p.PlaySync();$p.Dispose();$m.Dispose()";
@@ -57,8 +59,12 @@ async function playFallback(wav: Buffer): Promise<void> {
     if (await runProcess("paplay", ["--file-format=wav"], wav)) return;
   }
 
-  // Terminal bell is the final no-dependency fallback. It emits no visible text.
-  process.stdout.write("\x07");
+  // Keep the no-dependency terminal-bell fallback sparse rather than noisy.
+  const now = Date.now();
+  if (now - lastFallbackBellAt >= 900) {
+    lastFallbackBellAt = now;
+    process.stdout.write("\x07");
+  }
 }
 
 export class AudioOutput {

@@ -61,13 +61,13 @@
     "syntaxType": "violet",
     "syntaxOperator": "rose",
     "syntaxPunctuation": "textSecondary",
-    "thinkingOff": "textDim",
+    "thinkingOff": "gold",
     "thinkingMinimal": "violet",
     "thinkingLow": "teal",
     "thinkingMedium": "green",
     "thinkingHigh": "gold",
     "thinkingXhigh": "goldBright",
     "thinkingMax": "rose",
-    "bashMode": "goldBright"
+    "bashMode": "teal"
   }
 }

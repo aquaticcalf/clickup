@@ -21,40 +21,40 @@ type Note = {
 
 const EFFECTS: Record<SoundName, Note[]> = {
   on: [
-    { frequency: 523.25, start: 0, duration: 0.11, volume: 0.16 },
-    { frequency: 659.25, start: 0.07, duration: 0.14, volume: 0.14 },
-    { frequency: 783.99, start: 0.14, duration: 0.24, volume: 0.12 },
+    { frequency: 523.25, start: 0, duration: 0.11, volume: 0.09 },
+    { frequency: 659.25, start: 0.07, duration: 0.14, volume: 0.075 },
+    { frequency: 783.99, start: 0.14, duration: 0.2, volume: 0.06 },
   ],
   off: [
-    { frequency: 659.25, start: 0, duration: 0.12, volume: 0.12 },
-    { frequency: 523.25, start: 0.09, duration: 0.2, volume: 0.1 },
+    { frequency: 659.25, start: 0, duration: 0.12, volume: 0.075 },
+    { frequency: 523.25, start: 0.09, duration: 0.18, volume: 0.06 },
   ],
   agentStart: [
-    { frequency: 196, start: 0, duration: 0.16, volume: 0.09 },
-    { frequency: 293.66, start: 0.04, duration: 0.16, volume: 0.08 },
+    { frequency: 196, start: 0, duration: 0.16, volume: 0.055 },
+    { frequency: 293.66, start: 0.04, duration: 0.16, volume: 0.05 },
   ],
-  toolStart: [{ frequency: 880, start: 0, duration: 0.045, volume: 0.07 }],
+  toolStart: [{ frequency: 740, start: 0, duration: 0.035, volume: 0.025 }],
   toolSuccess: [
-    { frequency: 987.77, start: 0, duration: 0.07, volume: 0.09 },
-    { frequency: 1318.51, start: 0.05, duration: 0.13, volume: 0.08 },
+    { frequency: 987.77, start: 0, duration: 0.07, volume: 0.055 },
+    { frequency: 1318.51, start: 0.05, duration: 0.11, volume: 0.045 },
   ],
   toolError: [
-    { frequency: 180, start: 0, duration: 0.12, volume: 0.11 },
-    { frequency: 140, start: 0.08, duration: 0.16, volume: 0.09 },
+    { frequency: 180, start: 0, duration: 0.12, volume: 0.07 },
+    { frequency: 140, start: 0.08, duration: 0.14, volume: 0.055 },
   ],
   turnEnd: [
-    { frequency: 392, start: 0, duration: 0.11, volume: 0.08 },
-    { frequency: 523.25, start: 0.08, duration: 0.18, volume: 0.07 },
+    { frequency: 392, start: 0, duration: 0.11, volume: 0.05 },
+    { frequency: 523.25, start: 0.08, duration: 0.16, volume: 0.045 },
   ],
   settled: [
-    { frequency: 261.63, start: 0, duration: 0.42, volume: 0.035 },
-    { frequency: 329.63, start: 0, duration: 0.42, volume: 0.03 },
-    { frequency: 523.25, start: 0, duration: 0.12, volume: 0.08 },
-    { frequency: 659.25, start: 0.1, duration: 0.13, volume: 0.08 },
-    { frequency: 783.99, start: 0.21, duration: 0.15, volume: 0.09 },
-    { frequency: 1046.5, start: 0.34, duration: 0.2, volume: 0.1 },
-    { frequency: 1318.51, start: 0.49, duration: 0.25, volume: 0.09 },
-    { frequency: 1567.98, start: 0.64, duration: 0.5, volume: 0.08 },
+    { frequency: 261.63, start: 0, duration: 0.34, volume: 0.018 },
+    { frequency: 329.63, start: 0, duration: 0.34, volume: 0.015 },
+    { frequency: 523.25, start: 0, duration: 0.1, volume: 0.045 },
+    { frequency: 659.25, start: 0.08, duration: 0.11, volume: 0.045 },
+    { frequency: 783.99, start: 0.17, duration: 0.12, volume: 0.05 },
+    { frequency: 1046.5, start: 0.27, duration: 0.15, volume: 0.055 },
+    { frequency: 1318.51, start: 0.4, duration: 0.18, volume: 0.05 },
+    { frequency: 1567.98, start: 0.52, duration: 0.28, volume: 0.045 },
   ],
 };
 
