@@ -8,7 +8,7 @@ A restrained casino-lounge visual theme for pi. It is optional and off by defaul
 /casino
 ```
 
-`/casino` toggles the mode on and off.
+`/casino` toggles the mode on and off. The enabled preference persists in `~/.pi/agent/casino.json` and is restored for future TUI sessions.
 
 When enabled, it applies a high-contrast dark theme with gold as the primary accent and muted teal/rose secondary colors across Pi's built-in interface: messages, tools, diffs, Markdown, syntax highlighting, thinking levels, borders, and status colors. The normal prompt border uses gold, while shell mode uses teal so the two states are immediately distinguishable.
 
