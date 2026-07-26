@@ -1,0 +1,14 @@
+{
+  "name": "@aquaticcalf/pi-github",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:"
+  }
+}

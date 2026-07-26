@@ -7,6 +7,7 @@ A pnpm workspace and distributable pi package containing independently loadable 
 | Plugin | Location | Purpose |
 |---|---|---|
 | ClickUp | `plugins/clickup/` | Command-gated ClickUp API access with CRUD permissions |
+| GitHub | `plugins/github/` | Settings-style GitHub PR, checks, issue, and repository workflow |
 | Casino Mode | `plugins/casino/` | Optional refined casino-lounge theme toggled by `/casino` |
 | HIG | `plugins/hig/` | Always-loaded calm, readable visual baseline |
 
