@@ -6,27 +6,27 @@ import type { PluginSettings } from "./index.ts";
 
 export interface GithubMenuActions {
   listPullRequests(): Promise<PullRequestSummary[]>;
-  checkoutPullRequest(number: number): Promise<void>;
-  checkoutByNumber(number: number): Promise<void>;
-  returnFromPullRequest(): Promise<void>;
-  refreshPullRequests(): Promise<void>;
+  checkoutPullRequest(number: number): Promise<string | undefined>;
+  checkoutByNumber(number: number): Promise<string | undefined>;
+  returnFromPullRequest(): Promise<string | undefined>;
+  refreshPullRequests(): Promise<string | undefined>;
   showStatus(): Promise<string>;
   showPullRequest(number: number): Promise<string>;
   showDiff(number: number): Promise<string>;
-  openPullRequest(number: number): Promise<void>;
-  openRepository(): Promise<void>;
+  openPullRequest(number: number): Promise<string | undefined>;
+  openRepository(): Promise<string | undefined>;
   showChecks(number?: number): Promise<string>;
   waitForChecks(number: number): Promise<string>;
   listIssues(query?: string): Promise<IssueSummary[]>;
   showIssue(number: number): Promise<string>;
-  openIssue(number: number): Promise<void>;
-  createPullRequest(): Promise<void>;
-  pushCurrentBranch(): Promise<void>;
-  editPullRequest(number: number): Promise<void>;
-  commentOnPullRequest(number: number): Promise<void>;
-  setPullRequestState(number: number, state: "close" | "reopen"): Promise<void>;
-  markPullRequestReady(number: number): Promise<void>;
-  mergePullRequest(number: number): Promise<void>;
+  openIssue(number: number): Promise<string | undefined>;
+  createPullRequest(): Promise<string | undefined>;
+  pushCurrentBranch(): Promise<string | undefined>;
+  editPullRequest(number: number): Promise<string | undefined>;
+  commentOnPullRequest(number: number): Promise<string | undefined>;
+  setPullRequestState(number: number, state: "close" | "reopen"): Promise<string | undefined>;
+  markPullRequestReady(number: number): Promise<string | undefined>;
+  mergePullRequest(number: number, method: "merge" | "squash" | "rebase"): Promise<string | undefined>;
   saveSettings(settings: PluginSettings): void;
 }
 
@@ -38,12 +38,19 @@ interface MenuContext {
   done: () => void;
 }
 
+type PanelResult = string | Component | undefined;
+
 let currentTheme: ExtensionContext["ui"]["theme"];
 
 function border(): DynamicBorder {
   return new DynamicBorder((text: string) => currentTheme.fg("accent", text));
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** A core-style settings page: one list, one title, and one consistent escape path. */
 class SettingsPanel extends Container {
   private readonly list: SettingsList;
 
@@ -56,8 +63,11 @@ class SettingsPanel extends Container {
   ) {
     super();
     this.addChild(border());
-    this.addChild(new Text(currentTheme.fg("accent", currentTheme.bold(title)), 1, 0));
-    this.addChild(new Text(currentTheme.fg("muted", description), 1, 0));
+    this.addChild(new Text(currentTheme.bold(currentTheme.fg("accent", title)), 0, 0));
+    if (description) {
+      this.addChild(new Spacer(1));
+      this.addChild(new Text(currentTheme.fg("muted", description), 0, 0));
+    }
     this.addChild(new Spacer(1));
     this.list = new SettingsList(
       items,
@@ -68,6 +78,8 @@ class SettingsPanel extends Container {
       { enableSearch: true },
     );
     this.addChild(this.list);
+    this.addChild(new Spacer(1));
+    this.addChild(new Text(currentTheme.fg("dim", "  Enter to open · Esc to go back"), 0, 0));
     this.addChild(border());
   }
 
@@ -76,78 +88,16 @@ class SettingsPanel extends Container {
   }
 }
 
-class SelectPanel<T> extends Container {
-  private selectList: SelectList | undefined;
-
-  constructor(
-    title: string,
-    description: string,
-    menu: MenuContext,
-    load: () => Promise<T[]>,
-    toItem: (item: T) => SelectItem,
-    onSelect: (item: T) => Promise<void>,
-  ) {
+/** Inline result screen. Results no longer jump into a notification overlay. */
+class MessagePanel extends Container {
+  constructor(title: string, body: string, onCancel: () => void, tone: "normal" | "error" = "normal") {
     super();
     this.addChild(border());
-    this.addChild(new Text(currentTheme.fg("accent", currentTheme.bold(title)), 1, 0));
-    this.addChild(new Text(currentTheme.fg("muted", description), 1, 0));
+    this.addChild(new Text(currentTheme.bold(currentTheme.fg("accent", title)), 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(currentTheme.fg("dim", "Loading…"), 1, 0));
-    this.addChild(border());
-
-    void load().then(async (items) => {
-      this.clear();
-      this.addChild(border());
-      this.addChild(new Text(currentTheme.fg("accent", currentTheme.bold(title)), 1, 0));
-      this.addChild(new Text(currentTheme.fg("muted", description), 1, 0));
-      this.addChild(new Spacer(1));
-      const mapped = items.map(toItem);
-      if (mapped.length === 0) {
-        this.addChild(new Text(currentTheme.fg("warning", "Nothing found."), 1, 0));
-      } else {
-        this.selectList = new SelectList(mapped, Math.min(mapped.length, 12), {
-          selectedPrefix: (text) => currentTheme.fg("accent", text),
-          selectedText: (text) => currentTheme.fg("accent", text),
-          description: (text) => currentTheme.fg("muted", text),
-          scrollInfo: (text) => currentTheme.fg("dim", text),
-          noMatch: (text) => currentTheme.fg("warning", text),
-        }, { minPrimaryColumnWidth: 12, maxPrimaryColumnWidth: 42 });
-        this.selectList.onSelect = (selected) => {
-          const original = items.find((item) => toItem(item).value === selected.value);
-          if (original === undefined) return;
-          void onSelect(original).catch((error: unknown) => {
-            menu.ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
-          }).finally(menu.done);
-        };
-        this.selectList.onCancel = menu.done;
-        this.addChild(this.selectList);
-      }
-      this.addChild(new Spacer(1));
-      this.addChild(new Text(currentTheme.fg("dim", "  Enter to select · Esc to go back"), 1, 0));
-      this.addChild(border());
-      menu.tui.requestRender();
-    }).catch((error: unknown) => {
-      this.clear();
-      this.addChild(new Text(currentTheme.fg("error", error instanceof Error ? error.message : String(error)), 1, 0));
-      this.addChild(new Text(currentTheme.fg("dim", "Press Esc to go back"), 1, 0));
-      menu.tui.requestRender();
-    });
-  }
-
-  handleInput(data: string): void {
-    this.selectList?.handleInput(data);
-  }
-}
-
-class TextPanel extends Container {
-  constructor(title: string, body: string, onCancel: () => void) {
-    super();
-    this.addChild(border());
-    this.addChild(new Text(currentTheme.fg("accent", currentTheme.bold(title)), 1, 0));
+    this.addChild(new Text(tone === "error" ? currentTheme.fg("error", body) : body, 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(body, 1, 0));
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(currentTheme.fg("dim", "Press Esc to go back"), 1, 0));
+    this.addChild(new Text(currentTheme.fg("dim", "  Esc to go back"), 0, 0));
     this.addChild(border());
     this.onCancel = onCancel;
   }
@@ -159,123 +109,427 @@ class TextPanel extends Container {
   }
 }
 
-class NumberInputPanel extends Container {
-  private readonly input = new Input();
+/** A loading/action page that stays in the same menu instead of using notify(). */
+class ActionPanel extends Container {
+  private active: Component;
 
-  constructor(title: string, description: string, submit: (value: string) => Promise<void>, onError: (error: unknown) => void, done: () => void) {
+  constructor(
+    title: string,
+    description: string,
+    operation: () => Promise<string | undefined>,
+    onCancel: () => void,
+    requestRender: () => void,
+  ) {
     super();
+    this.active = new MessagePanel(title, `${description}\n\nWorking…`, onCancel);
+    this.renderFrame();
+    void operation().then((result) => {
+      this.active = new MessagePanel(title, `${description}\n\n${result ?? "No changes made."}`, onCancel);
+      this.renderFrame();
+      requestRender();
+    }).catch((error: unknown) => {
+      this.active = new MessagePanel(title, `${description}\n\n${errorText(error)}`, onCancel, "error");
+      this.renderFrame();
+      requestRender();
+    });
+  }
+
+  private renderFrame(): void {
+    this.clear();
+    this.addChild(this.active);
+  }
+
+  handleInput(data: string): void {
+    this.active.handleInput?.(data);
+  }
+}
+
+/** Async selector used by the GitHub API. Loading, errors, and results share one page. */
+class SelectPanel<T> extends Container {
+  private active: Component;
+  private list: SelectList | undefined;
+  private readonly title: string;
+  private readonly description: string;
+  private readonly menu: MenuContext;
+  private readonly load: () => Promise<T[]>;
+  private readonly toItem: (item: T) => SelectItem;
+  private readonly onSelect: (item: T) => Promise<PanelResult>;
+
+  constructor(
+    title: string,
+    description: string,
+    menu: MenuContext,
+    load: () => Promise<T[]>,
+    toItem: (item: T) => SelectItem,
+    onSelect: (item: T) => Promise<PanelResult>,
+  ) {
+    super();
+    this.title = title;
+    this.description = description;
+    this.menu = menu;
+    this.load = load;
+    this.toItem = toItem;
+    this.onSelect = onSelect;
+    this.active = new MessagePanel(title, "Loading…", menu.done);
+    this.renderFrame();
+    void this.reload();
+  }
+
+  async showList(): Promise<void> {
+    await this.reload();
+  }
+
+  private async reload(): Promise<void> {
+    this.list = undefined;
+    this.active = new MessagePanel(this.title, "Loading…", this.menu.done);
+    this.renderFrame();
+    this.menu.tui.requestRender();
+    try {
+      const items = await this.load();
+      if (items.length === 0) {
+        this.active = new MessagePanel(this.title, "Nothing found.", this.menu.done);
+      } else {
+        this.list = new SelectList(
+          items.map(this.toItem),
+          Math.min(items.length, 12),
+          {
+            selectedPrefix: (text) => currentTheme.fg("accent", text),
+            selectedText: (text) => currentTheme.fg("accent", text),
+            description: (text) => currentTheme.fg("muted", text),
+            scrollInfo: (text) => currentTheme.fg("dim", text),
+            noMatch: (text) => currentTheme.fg("warning", text),
+          },
+          { minPrimaryColumnWidth: 12, maxPrimaryColumnWidth: 42 },
+        );
+        this.list.onSelect = (selected) => {
+          const index = items.findIndex((item) => this.toItem(item).value === selected.value);
+          const original = index >= 0 ? items[index] : undefined;
+          if (original === undefined) return;
+          void this.onSelect(original).then((result) => {
+            if (result && typeof result !== "string") {
+              this.active = result;
+            } else {
+              this.active = new MessagePanel(this.title, result ?? "No changes made.", this.menu.done);
+            }
+            this.list = undefined;
+            this.renderFrame();
+            this.menu.tui.requestRender();
+          }).catch((error: unknown) => {
+            this.list = undefined;
+            this.active = new MessagePanel(this.title, errorText(error), this.menu.done, "error");
+            this.renderFrame();
+            this.menu.tui.requestRender();
+          });
+        };
+        this.list.onCancel = this.menu.done;
+        this.active = this.list;
+      }
+      this.renderFrame();
+      this.menu.tui.requestRender();
+    } catch (error: unknown) {
+      this.active = new MessagePanel(this.title, errorText(error), this.menu.done, "error");
+      this.renderFrame();
+      this.menu.tui.requestRender();
+    }
+  }
+
+  private renderFrame(): void {
+    this.clear();
+    if (!this.list) {
+      this.addChild(this.active);
+      return;
+    }
     this.addChild(border());
-    this.addChild(new Text(currentTheme.fg("accent", currentTheme.bold(title)), 1, 0));
-    this.addChild(new Text(currentTheme.fg("muted", description), 1, 0));
+    this.addChild(new Text(currentTheme.bold(currentTheme.fg("accent", this.title)), 0, 0));
+    if (this.description) this.addChild(new Text(currentTheme.fg("muted", this.description), 0, 0));
     this.addChild(new Spacer(1));
-    this.input.onSubmit = (value) => void submit(value).catch(onError).finally(done);
-    this.input.onEscape = done;
-    this.addChild(this.input);
+    this.addChild(this.active);
     this.addChild(new Spacer(1));
-    this.addChild(new Text(currentTheme.fg("dim", "Enter to continue · Esc to go back"), 1, 0));
+    this.addChild(new Text(currentTheme.fg("dim", "  Enter to select · Esc to go back"), 0, 0));
     this.addChild(border());
   }
 
   handleInput(data: string): void {
-    this.input.handleInput(data);
+    this.active.handleInput?.(data);
   }
 }
 
-function showText(menu: MenuContext, title: string, body: string): Promise<void> {
-  return menu.ctx.ui.custom<void>((_tui, _theme, _kb, done) => new TextPanel(title, body, done), { overlay: true }).then(() => undefined);
+class NumberInputPanel extends Container {
+  private readonly input = new Input();
+  private active: Component;
+  private readonly onCancel: () => void;
+  private readonly requestRender: () => void;
+  private readonly title: string;
+
+  constructor(
+    title: string,
+    description: string,
+    submit: (value: string) => Promise<string | undefined>,
+    onCancel: () => void,
+    requestRender: () => void,
+  ) {
+    super();
+    this.title = title;
+    this.onCancel = onCancel;
+    this.requestRender = requestRender;
+    this.active = this.input;
+    this.input.onSubmit = (value) => {
+      void submit(value).then((result) => this.showResult(result ?? "No changes made.")).catch((error: unknown) => this.showResult(errorText(error), true));
+    };
+    this.input.onEscape = onCancel;
+    this.renderFrame(description);
+  }
+
+  private showResult(body: string, error = false): void {
+    this.active = new MessagePanel(this.title, body, this.onCancel, error ? "error" : "normal");
+    this.renderFrame("");
+    this.requestRender();
+  }
+
+  private renderFrame(description: string): void {
+    this.clear();
+    if (this.active !== this.input) {
+      this.addChild(this.active);
+      return;
+    }
+    this.addChild(border());
+    this.addChild(new Text(currentTheme.bold(currentTheme.fg("accent", this.title)), 0, 0));
+    if (description) this.addChild(new Text(currentTheme.fg("muted", description), 0, 0));
+    this.addChild(new Spacer(1));
+    this.addChild(this.active);
+    this.addChild(new Text(currentTheme.fg("dim", "  Enter to continue · Esc to go back"), 0, 0));
+    this.addChild(border());
+  }
+
+  handleInput(data: string): void {
+    this.active.handleInput?.(data);
+  }
 }
 
-function prPicker(menu: MenuContext, title: string, description: string, operation: (number: number) => Promise<void>): Component {
-  return new SelectPanel(title, description, menu, menu.actions.listPullRequests, (pr) => ({
+function actionPanel(menu: MenuContext, title: string, description: string, operation: () => Promise<string | undefined>): Component {
+  return new ActionPanel(title, description, operation, menu.done, menu.tui.requestRender);
+}
+
+function readPanel(menu: MenuContext, title: string, description: string, load: () => Promise<string>): Component {
+  return actionPanel(menu, title, description, load);
+}
+
+function pullRequestItem(pr: PullRequestSummary): SelectItem {
+  return {
     value: String(pr.number),
     label: `#${pr.number} ${pr.title}`,
     description: `${pr.author} · ${pr.checks} checks · ${pr.reviewDecision}${pr.isDraft ? " · draft" : ""}`,
-  }), (pr) => operation(pr.number));
+  };
+}
+
+function prPicker(
+  menu: MenuContext,
+  title: string,
+  description: string,
+  operation: (number: number, back: () => void) => Promise<PanelResult>,
+): Component {
+  let picker: SelectPanel<PullRequestSummary>;
+  picker = new SelectPanel(
+    title,
+    description,
+    menu,
+    menu.actions.listPullRequests,
+    pullRequestItem,
+    (pr) => operation(pr.number, () => { void picker.showList(); }),
+  );
+  return picker;
 }
 
 function issuePicker(menu: MenuContext): Component {
-  return new SelectPanel("Issues", "Select an open issue", menu, () => menu.actions.listIssues(), (issue) => ({
-    value: String(issue.number),
-    label: `#${issue.number} ${issue.title}`,
-    description: `${issue.author}${issue.labels ? ` · ${issue.labels}` : ""}`,
-  }), async (issue) => showText(menu, `Issue #${issue.number}`, await menu.actions.showIssue(issue.number)));
+  return new SelectPanel(
+    "Issues",
+    "Select an open issue",
+    menu,
+    () => menu.actions.listIssues(),
+    (issue) => ({
+      value: String(issue.number),
+      label: `#${issue.number} ${issue.title}`,
+      description: `${issue.author}${issue.labels ? ` · ${issue.labels}` : ""}`,
+    }),
+    (issue) => menu.actions.showIssue(issue.number),
+  );
 }
 
-function safe(menu: MenuContext, operation: () => Promise<void>): void {
-  void operation().catch((error: unknown) => menu.ctx.ui.notify(error instanceof Error ? error.message : String(error), "error"));
+function choicePanel(
+  menu: MenuContext,
+  title: string,
+  description: string,
+  choices: SelectItem[],
+  onSelect: (value: string) => Promise<string | undefined>,
+  onCancel: () => void,
+): Component {
+  const panelMenu = { ...menu, done: onCancel };
+  return new SelectPanel(
+    title,
+    description,
+    panelMenu,
+    async () => choices,
+    (choice) => choice,
+    (choice) => onSelect(choice.value),
+  );
 }
 
 function makeWorkflow(menu: MenuContext): Component {
-  return new SettingsPanel("GitHub · PR workflow", "Checkout and restore pull-request code safely.", [
-    { id: "checkout", label: "Checkout a PR", description: "Choose an open PR and checkout its code.", currentValue: "choose PR", submenu: () => prPicker(menu, "Checkout PR", "Select an open pull request", menu.actions.checkoutPullRequest) },
-    { id: "checkout-number", label: "Checkout by number", description: "Enter a pull-request number directly.", currentValue: "enter number", submenu: () => new NumberInputPanel("Checkout PR", "Enter a pull-request number", async (value) => {
-      const number = Number.parseInt(value.trim(), 10);
-      if (!Number.isInteger(number) || number < 1) throw new Error("Enter a valid pull-request number.");
-      await menu.actions.checkoutByNumber(number);
-    }, (error) => menu.ctx.ui.notify(error instanceof Error ? error.message : String(error), "error"), menu.done) },
-    { id: "return", label: "Return from PR", description: "Restore the branch saved before checkout.", currentValue: "restore", values: ["restore"] },
-    { id: "refresh", label: "Refresh PR list", description: "Reload GitHub data on the next picker.", currentValue: "refresh", values: ["refresh"] },
-  ], (id) => {
-    if (id === "return") safe(menu, menu.actions.returnFromPullRequest);
-    if (id === "refresh") safe(menu, menu.actions.refreshPullRequests);
-  }, menu.done);
+  return new SettingsPanel("PR workflow", "Checkout and restore pull-request code safely.", [
+    {
+      id: "checkout",
+      label: "Checkout a PR",
+      description: "Choose an open PR and checkout its code.",
+      currentValue: "choose PR",
+      submenu: () => prPicker(menu, "Checkout PR", "Select an open pull request", (number) => menu.actions.checkoutPullRequest(number)),
+    },
+    {
+      id: "checkout-number",
+      label: "Checkout by number",
+      description: "Enter a pull-request number directly.",
+      currentValue: "enter number",
+      submenu: () => new NumberInputPanel("Checkout PR", "Enter a pull-request number", async (value) => {
+        const number = Number.parseInt(value.trim(), 10);
+        if (!Number.isInteger(number) || number < 1) throw new Error("Enter a valid pull-request number.");
+        return menu.actions.checkoutByNumber(number);
+      }, menu.done, menu.tui.requestRender),
+    },
+    {
+      id: "return",
+      label: "Return from PR",
+      description: "Restore the branch saved before checkout.",
+      currentValue: "restore",
+      submenu: () => actionPanel(menu, "Return from PR", "Restore the original branch.", menu.actions.returnFromPullRequest),
+    },
+    {
+      id: "refresh",
+      label: "Refresh PR list",
+      description: "Refresh GitHub data before choosing a pull request.",
+      currentValue: "refresh",
+      submenu: () => actionPanel(menu, "Refresh PR list", "Reload open pull requests.", menu.actions.refreshPullRequests),
+    },
+  ], () => undefined, menu.done);
 }
 
 function makeBrowse(menu: MenuContext): Component {
-  return new SettingsPanel("GitHub · Browse", "Inspect pull requests, diffs, issues, and repository links.", [
-    { id: "details", label: "PR details", description: "View description, branches, reviews, labels, and mergeability.", currentValue: "choose PR", submenu: () => prPicker(menu, "PR details", "Select a pull request", async (number) => showText(menu, `PR #${number}`, await menu.actions.showPullRequest(number))) },
-    { id: "diff", label: "PR diff", description: "View the selected pull request's diff.", currentValue: "choose PR", submenu: () => prPicker(menu, "PR diff", "Select a pull request", async (number) => showText(menu, `PR #${number} diff`, await menu.actions.showDiff(number))) },
-    { id: "list", label: "List open PRs", description: "Display the currently open pull requests.", currentValue: "list", values: ["list"] },
-    { id: "open-pr", label: "Open PR in browser", description: "Choose a PR and open it in the browser.", currentValue: "choose PR", submenu: () => prPicker(menu, "Open PR", "Select a pull request", menu.actions.openPullRequest) },
+  return new SettingsPanel("Browse GitHub", "Inspect pull requests, diffs, issues, and repository links.", [
+    {
+      id: "details",
+      label: "PR details",
+      description: "View description, branches, reviews, labels, and mergeability.",
+      currentValue: "choose PR",
+      submenu: () => prPicker(menu, "PR details", "Select a pull request", (number) => menu.actions.showPullRequest(number)),
+    },
+    {
+      id: "diff",
+      label: "PR diff",
+      description: "View a pull request's diff.",
+      currentValue: "choose PR",
+      submenu: () => prPicker(menu, "PR diff", "Select a pull request", (number) => menu.actions.showDiff(number)),
+    },
+    {
+      id: "list",
+      label: "List open PRs",
+      description: "Display the currently open pull requests.",
+      currentValue: "view",
+      submenu: () => readPanel(menu, "Open pull requests", "Currently open pull requests.", async () => {
+        const prs = await menu.actions.listPullRequests();
+        return prs.length ? prs.map((pr) => `#${pr.number} ${pr.title} · ${pr.author} · ${pr.checks}`).join("\n") : "No open pull requests.";
+      }),
+    },
+    {
+      id: "open-pr",
+      label: "Open PR in browser",
+      description: "Choose a PR and open it in the browser.",
+      currentValue: "choose PR",
+      submenu: () => prPicker(menu, "Open PR", "Select a pull request", (number) => menu.actions.openPullRequest(number)),
+    },
     { id: "issues", label: "Issues", description: "Browse open issues.", currentValue: "choose issue", submenu: () => issuePicker(menu) },
-    { id: "open-repo", label: "Open repository", description: "Open the current GitHub repository in the browser.", currentValue: "open", values: ["open"] },
-  ], (id) => {
-    if (id === "list") safe(menu, async () => {
-      const prs = await menu.actions.listPullRequests();
-      await showText(menu, "Open pull requests", prs.length ? prs.map((pr) => `#${pr.number} ${pr.title} · ${pr.author} · ${pr.checks}`).join("\n") : "No open pull requests.");
-    });
-    if (id === "open-repo") safe(menu, menu.actions.openRepository);
-  }, menu.done);
+    {
+      id: "open-repo",
+      label: "Open repository",
+      description: "Open the current GitHub repository in the browser.",
+      currentValue: "open",
+      submenu: () => actionPanel(menu, "Open repository", "Open the repository in your browser.", menu.actions.openRepository),
+    },
+  ], () => undefined, menu.done);
 }
 
 function makeChecks(menu: MenuContext): Component {
-  return new SettingsPanel("GitHub · Checks and CI", "Review and wait for pull-request checks.", [
-    { id: "current", label: "Current checks", description: "Show checks for the current branch's pull request.", currentValue: "view", values: ["view"] },
-    { id: "pr", label: "PR checks", description: "Choose a PR and show its checks.", currentValue: "choose PR", submenu: () => prPicker(menu, "PR checks", "Select a pull request", async (number) => showText(menu, `PR #${number} checks`, await menu.actions.showChecks(number))) },
-    { id: "wait", label: "Wait for checks", description: "Poll checks until they finish. Escape cancels the wait.", currentValue: "choose PR", submenu: () => prPicker(menu, "Wait for checks", "Select a pull request", async (number) => showText(menu, `PR #${number} checks`, await menu.actions.waitForChecks(number))) },
-  ], (id) => {
-    if (id === "current") safe(menu, async () => showText(menu, "Current checks", await menu.actions.showChecks()));
-  }, menu.done);
+  return new SettingsPanel("Checks and CI", "Review and wait for pull-request checks.", [
+    {
+      id: "current",
+      label: "Current checks",
+      description: "Show checks for the current branch's pull request.",
+      currentValue: "view",
+      submenu: () => readPanel(menu, "Current checks", "Checks for the current pull request.", () => menu.actions.showChecks()),
+    },
+    {
+      id: "pr",
+      label: "PR checks",
+      description: "Choose a PR and show its checks.",
+      currentValue: "choose PR",
+      submenu: () => prPicker(menu, "PR checks", "Select a pull request", (number) => menu.actions.showChecks(number)),
+    },
+    {
+      id: "wait",
+      label: "Wait for checks",
+      description: "Poll checks until they finish. Escape cancels the wait.",
+      currentValue: "choose PR",
+      submenu: () => prPicker(menu, "Wait for checks", "Select a pull request", (number) => menu.actions.waitForChecks(number)),
+    },
+  ], () => undefined, menu.done);
 }
 
 function makeRepository(menu: MenuContext): Component {
-  const chooseAnd = (title: string, operation: (number: number) => Promise<void>): Component => prPicker(menu, title, "Select a pull request", operation);
-  return new SettingsPanel("GitHub · Repository actions", "Actions that can modify Git or GitHub always ask for confirmation.", [
-    { id: "create", label: "Create PR", description: "Create a pull request from the current branch.", currentValue: "start", values: ["start"] },
-    { id: "push", label: "Push current branch", description: "Push the current branch after confirmation.", currentValue: "push", values: ["push"] },
-    { id: "edit", label: "Edit PR", description: "Choose a PR and edit its title/body.", currentValue: "choose PR", submenu: () => chooseAnd("Edit PR", menu.actions.editPullRequest) },
-    { id: "comment", label: "Comment on PR", description: "Choose a PR and add a comment.", currentValue: "choose PR", submenu: () => chooseAnd("Comment on PR", menu.actions.commentOnPullRequest) },
-    { id: "ready", label: "Mark ready for review", description: "Choose a draft PR to mark ready.", currentValue: "choose PR", submenu: () => chooseAnd("Mark ready", menu.actions.markPullRequestReady) },
-    { id: "state", label: "Close or reopen PR", description: "Choose a PR and change its state.", currentValue: "choose PR", submenu: () => chooseAnd("Change PR state", async (number) => {
-      const state = await menu.ctx.ui.select("PR state", ["Close", "Reopen"]);
-      if (state) await menu.actions.setPullRequestState(number, state === "Close" ? "close" : "reopen");
-    }) },
-    { id: "merge", label: "Merge PR", description: "Choose a PR and explicitly confirm the merge method.", currentValue: "choose PR", submenu: () => chooseAnd("Merge PR", menu.actions.mergePullRequest) },
-  ], (id) => {
-    if (id === "create") safe(menu, menu.actions.createPullRequest);
-    if (id === "push") safe(menu, menu.actions.pushCurrentBranch);
-  }, menu.done);
+  const chooseAnd = (title: string, operation: (number: number, back: () => void) => Promise<PanelResult>): Component =>
+    prPicker(menu, title, "Select a pull request", operation);
+
+  return new SettingsPanel("Repository actions", "Changes stay in this menu; confirmations still protect destructive actions.", [
+    { id: "create", label: "Create PR", description: "Create a pull request from the current branch.", currentValue: "start", submenu: () => actionPanel(menu, "Create PR", "Create a pull request from the current branch.", menu.actions.createPullRequest) },
+    { id: "push", label: "Push current branch", description: "Push the current branch after confirmation.", currentValue: "push", submenu: () => actionPanel(menu, "Push current branch", "Push local commits to the configured upstream.", menu.actions.pushCurrentBranch) },
+    { id: "edit", label: "Edit PR", description: "Choose a PR and edit its title/body.", currentValue: "choose PR", submenu: () => chooseAnd("Edit PR", (number) => menu.actions.editPullRequest(number)) },
+    { id: "comment", label: "Comment on PR", description: "Choose a PR and add a comment.", currentValue: "choose PR", submenu: () => chooseAnd("Comment on PR", (number) => menu.actions.commentOnPullRequest(number)) },
+    { id: "ready", label: "Mark ready for review", description: "Choose a draft PR to mark ready.", currentValue: "choose PR", submenu: () => chooseAnd("Mark ready", (number) => menu.actions.markPullRequestReady(number)) },
+    {
+      id: "state",
+      label: "Close or reopen PR",
+      description: "Choose a PR and change its state.",
+      currentValue: "choose PR",
+      submenu: () => chooseAnd("Change PR state", async (number, back) => choicePanel(
+        menu,
+        "PR state",
+        "Choose what to do with this pull request.",
+        [{ value: "close", label: "Close" }, { value: "reopen", label: "Reopen" }],
+        (state) => menu.actions.setPullRequestState(number, state as "close" | "reopen"),
+        back,
+      )),
+    },
+    {
+      id: "merge",
+      label: "Merge PR",
+      description: "Choose a PR and explicitly confirm the merge method.",
+      currentValue: "choose PR",
+      submenu: () => chooseAnd("Merge PR", async (number, back) => choicePanel(
+        menu,
+        "Merge method",
+        "Choose a merge method for this pull request.",
+        [{ value: "merge", label: "Merge" }, { value: "squash", label: "Squash" }, { value: "rebase", label: "Rebase" }],
+        (method) => menu.actions.mergePullRequest(number, method as "merge" | "squash" | "rebase"),
+        back,
+      )),
+    },
+  ], () => undefined, menu.done);
 }
 
 function makeLocal(menu: MenuContext): Component {
   const items: SettingItem[] = [
     { id: "dirty-policy", label: "Dirty tree policy", description: "Refuse is safest; assisted commit offers an explicit commit flow.", currentValue: menu.settings.dirtyPolicy, values: ["refuse", "offer-commit"] },
-    { id: "clean-commit", label: "Require clean commit", description: "Always verify HEAD is a real commit before PR checkout.", currentValue: "yes", values: ["yes"] },
     { id: "unpushed", label: "Warn about unpushed commits", description: "Warn when the current branch is ahead of its upstream.", currentValue: menu.settings.warnUnpushed ? "yes" : "no", values: ["yes", "no"] },
     { id: "confirm", label: "Confirm branch changes", description: "Ask before checkout, branch, push, commit, or merge operations.", currentValue: menu.settings.confirmBranchChanges ? "yes" : "no", values: ["yes", "no"] },
     { id: "refresh-data", label: "Auto-refresh GitHub data", description: "Refresh issue autocomplete after each session starts.", currentValue: menu.settings.autoRefresh ? "yes" : "no", values: ["yes", "no"] },
   ];
-  return new SettingsPanel("GitHub · Local workflow", "Configure safe checkout behavior.", items, (id, value) => {
+  return new SettingsPanel("Local workflow", "Configure checkout and safety preferences.", items, (id, value) => {
     if (id === "dirty-policy") menu.settings.dirtyPolicy = value as PluginSettings["dirtyPolicy"];
     if (id === "unpushed") menu.settings.warnUnpushed = value === "yes";
     if (id === "confirm") menu.settings.confirmBranchChanges = value === "yes";
@@ -285,11 +539,9 @@ function makeLocal(menu: MenuContext): Component {
 }
 
 function makeStatus(menu: MenuContext): Component {
-  return new SettingsPanel("GitHub · Status", "Show current repository and authentication state.", [
-    { id: "status", label: "Repository status", description: "Show Git, GitHub, authentication, PR, and check status.", currentValue: "view", values: ["view"] },
-  ], (id) => {
-    if (id === "status") safe(menu, async () => showText(menu, "GitHub status", await menu.actions.showStatus()));
-  }, menu.done);
+  return new SettingsPanel("GitHub status", "Show current repository and authentication state.", [
+    { id: "status", label: "Repository status", description: "Show Git, GitHub, authentication, PR, and check status.", currentValue: "view", submenu: () => readPanel(menu, "GitHub status", "Current repository and authentication state.", menu.actions.showStatus) },
+  ], () => undefined, menu.done);
 }
 
 export function createGithubMenu(
@@ -301,13 +553,12 @@ export function createGithubMenu(
 ): Component {
   currentTheme = ctx.ui.theme;
   const menu: MenuContext = { ctx, settings, actions, tui, done };
-  const root = new SettingsPanel("GitHub", "Use Enter to open a section; Esc to go back.", [
+  return new SettingsPanel("GitHub", "Choose a section. Enter opens it; Esc goes back.", [
     { id: "workflow", label: "PR workflow", description: "Checkout and restore pull-request code.", currentValue: "open", submenu: (_value, back) => makeWorkflow({ ...menu, done: back }) },
     { id: "browse", label: "Browse GitHub", description: "Inspect PRs, diffs, issues, and repository links.", currentValue: "open", submenu: (_value, back) => makeBrowse({ ...menu, done: back }) },
     { id: "checks", label: "Checks and CI", description: "Review or wait for GitHub checks.", currentValue: "open", submenu: (_value, back) => makeChecks({ ...menu, done: back }) },
     { id: "repository", label: "Repository actions", description: "Create PRs and perform confirmation-gated actions.", currentValue: "open", submenu: (_value, back) => makeRepository({ ...menu, done: back }) },
     { id: "local", label: "Local workflow", description: "Configure checkout and safety preferences.", currentValue: "configure", submenu: (_value, back) => makeLocal({ ...menu, done: back }) },
     { id: "status", label: "GitHub status", description: "Show current repository and authentication state.", currentValue: "view", submenu: (_value, back) => makeStatus({ ...menu, done: back }) },
-  ], () => done(), done);
-  return root;
+  ], () => undefined, done);
 }

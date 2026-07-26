@@ -29,7 +29,6 @@ const DEFAULT_SETTINGS: PluginSettings = {
 };
 
 const STATE_ENTRY = "github-plugin-state";
-const STATUS_KEY = "github-plugin";
 
 function cloneSettings(settings: PluginSettings): PluginSettings {
   return { ...settings };
@@ -109,13 +108,10 @@ export default function github(pi: ExtensionAPI): void {
       status = await withStatus(ctx);
     }
     if (status.dirtyFiles.length > 0) throw new Error("Working tree is still dirty after the commit attempt.");
-    if (settings.warnUnpushed && (status.ahead ?? 0) > 0) {
-      ctx.ui.notify(`Current branch has ${status.ahead} unpushed commit(s).`, "warning");
-    }
     return status;
   };
 
-  const checkoutPullRequest = async (ctx: ExtensionCommandContext, number: number): Promise<void> => {
+  const checkoutPullRequest = async (ctx: ExtensionCommandContext, number: number): Promise<string | undefined> => {
     if (!Number.isInteger(number) || number < 1) throw new Error("Invalid pull-request number.");
     const status = await prepareCleanCheckout(ctx);
     const confirmed = await confirmChange(
@@ -129,7 +125,10 @@ export default function github(pi: ExtensionAPI): void {
     await git.checkoutPullRequest(number, status.root, ctx.signal);
     checkout = { repoRoot: status.root, originalBranch: status.branch, originalCommit: status.commit, prNumber: number };
     save();
-    ctx.ui.notify(`Checked out PR #${number} in detached HEAD mode.`, "info");
+    const warning = settings.warnUnpushed && (status.ahead ?? 0) > 0
+      ? `\n\nNote: the original branch had ${status.ahead} unpushed commit(s).`
+      : "";
+    return `Checked out PR #${number} in detached HEAD mode.${warning}`;
   };
 
   const actions = (ctx: ExtensionCommandContext): GithubMenuActions => ({
@@ -141,14 +140,13 @@ export default function github(pi: ExtensionAPI): void {
       const confirmed = await confirmChange(ctx, "Return from PR?", "Return to the original branch.");
       if (!confirmed) return;
       await git.switchBack(checkout, ctx.cwd, ctx.signal);
-      const previous = checkout;
       checkout = undefined;
       save();
-      ctx.ui.notify("Returned to the original branch.", "info");
+      return "Returned to the original branch.";
     },
     refreshPullRequests: async () => {
       const prs = await githubApi.listPullRequests(ctx.cwd, ctx.signal);
-      ctx.ui.notify(`Loaded ${prs.length} open pull request(s).`, "info");
+      return `Loaded ${prs.length} open pull request(s).`;
     },
     showStatus: async () => {
       const status = await withStatus(ctx);
@@ -175,11 +173,11 @@ export default function github(pi: ExtensionAPI): void {
     showDiff: (number) => githubApi.pullRequestDiff(number, ctx.cwd, ctx.signal).then(output),
     openPullRequest: async (number) => {
       await githubApi.openPullRequest(number, ctx.cwd);
-      ctx.ui.notify(`Opened PR #${number} in the browser.`, "info");
+      return `Opened PR #${number} in the browser.`;
     },
     openRepository: async () => {
       await githubApi.openRepository(ctx.cwd);
-      ctx.ui.notify("Opened the repository in the browser.", "info");
+      return "Opened the repository in the browser.";
     },
     showChecks: (number) => githubApi.checks(number, ctx.cwd, ctx.signal).then(output),
     waitForChecks: (number) => githubApi.waitForChecks(number, ctx.cwd, ctx.signal).then(output),
@@ -187,7 +185,7 @@ export default function github(pi: ExtensionAPI): void {
     showIssue: (number) => githubApi.issueDetails(number, ctx.cwd, ctx.signal).then(output),
     openIssue: async (number) => {
       await githubApi.checked(["issue", "view", String(number), "--web"], ctx.cwd, ctx.signal);
-      ctx.ui.notify(`Opened issue #${number} in the browser.`, "info");
+      return `Opened issue #${number} in the browser.`;
     },
     createPullRequest: async () => {
       const status = await withStatus(ctx);
@@ -199,12 +197,12 @@ export default function github(pi: ExtensionAPI): void {
       const body = await ctx.ui.editor("PR description", "");
       if (body === undefined) return;
       const url = await githubApi.createPullRequest(title.trim(), body, ctx.cwd, ctx.signal);
-      ctx.ui.notify(`Created pull request: ${url}`, "info");
+      return `Created pull request: ${url}`;
     },
     pushCurrentBranch: async () => {
       const confirmed = await confirmChange(ctx, "Push current branch?", "This will push local commits to the configured upstream.");
       if (!confirmed) return;
-      ctx.ui.notify(await git.pushCurrent(ctx.cwd, ctx.signal), "info");
+      return git.pushCurrent(ctx.cwd, ctx.signal);
     },
     editPullRequest: async (number) => {
       const confirmed = await confirmChange(ctx, "Edit PR?", `Modify metadata for PR #${number}?`);
@@ -215,31 +213,29 @@ export default function github(pi: ExtensionAPI): void {
       if (title?.trim()) args.push("--title", title.trim());
       if (body !== undefined) args.push("--body", body);
       if (args.length === 0) return;
-      ctx.ui.notify(await githubApi.editPullRequest(number, args, ctx.cwd, ctx.signal), "info");
+      return githubApi.editPullRequest(number, args, ctx.cwd, ctx.signal);
     },
     commentOnPullRequest: async (number) => {
       const confirmed = await confirmChange(ctx, "Comment on PR?", `Post a comment on PR #${number}?`);
       if (!confirmed) return;
       const body = await ctx.ui.editor("PR comment", "");
       if (!body?.trim()) return;
-      ctx.ui.notify(await githubApi.commentOnPullRequest(number, body, ctx.cwd, ctx.signal), "info");
+      return githubApi.commentOnPullRequest(number, body, ctx.cwd, ctx.signal);
     },
     setPullRequestState: async (number, state) => {
       const confirmed = await confirmChange(ctx, `${state === "close" ? "Close" : "Reopen"} PR?`, `Change PR #${number} to ${state}?`);
       if (!confirmed) return;
-      ctx.ui.notify(await githubApi.setPullRequestState(number, state, ctx.cwd, ctx.signal), "info");
+      return githubApi.setPullRequestState(number, state, ctx.cwd, ctx.signal);
     },
     markPullRequestReady: async (number) => {
       const confirmed = await confirmChange(ctx, "Mark PR ready?", `Mark PR #${number} ready for review?`);
       if (!confirmed) return;
-      ctx.ui.notify(await githubApi.markReady(number, ctx.cwd, ctx.signal), "info");
+      return githubApi.markReady(number, ctx.cwd, ctx.signal);
     },
-    mergePullRequest: async (number) => {
-      const method = await ctx.ui.select("Merge method", ["merge", "squash", "rebase"]);
-      if (!method) return;
+    mergePullRequest: async (number, method) => {
       const confirmed = await confirmChange(ctx, "Merge pull request?", `Merge PR #${number} using ${method}? This cannot usually be undone.`);
       if (!confirmed) return;
-      ctx.ui.notify(await githubApi.mergePullRequest(number, method as "merge" | "squash" | "rebase", ctx.cwd, ctx.signal), "info");
+      return githubApi.mergePullRequest(number, method, ctx.cwd, ctx.signal);
     },
     saveSettings: (next) => {
       settings = cloneSettings(next);
@@ -268,7 +264,6 @@ export default function github(pi: ExtensionAPI): void {
     const state = loadState(ctx as ExtensionCommandContext);
     settings = { ...DEFAULT_SETTINGS, ...(state.settings ?? {}) };
     checkout = state.checkout;
-    ctx.ui.setStatus(STATUS_KEY, "GitHub · ready");
     if (ctx.mode !== "tui") return;
 
     ctx.ui.addAutocompleteProvider((current) => ({
@@ -304,10 +299,6 @@ export default function github(pi: ExtensionAPI): void {
     if (settings.autoRefresh) {
       void githubApi.listIssues(ctx.cwd).then((issues) => { issueCache = issues; }).catch(() => undefined);
     }
-  });
-
-  pi.on("session_shutdown", (_event, ctx) => {
-    ctx.ui.setStatus(STATUS_KEY, undefined);
   });
 
 }
