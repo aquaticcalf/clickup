@@ -83,9 +83,8 @@ export default function casino(pi: ExtensionAPI): void {
     handler: async (_args, ctx) => {
       if (enabled) {
         disable(ctx);
-        ctx.ui.notify("Casino mode off", "info");
-      } else if (enable(ctx)) {
-        ctx.ui.notify("Casino mode on", "info");
+      } else {
+        enable(ctx);
       }
     },
   });

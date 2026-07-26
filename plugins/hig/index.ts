@@ -6,17 +6,29 @@ const ALT_SCREEN_ON = "\u001b[?1049h\u001b[2J\u001b[H";
 const ALT_SCREEN_OFF = "\u001b[?1049l";
 const FOOTER_ROWS = 3;
 const DEFAULT_WIDGET_ROWS = 1;
-const PI_MARK = [
-  "  ████████████████████████  ",
-  "  ██                      ██  ",
-  "  ██                      ██  ",
-  "  ██                      ██  ",
-  "  ██                      ██  ",
-  "  ██                      ██  ",
-  "  ██                      ██  ",
-];
+const PI_GLYPH_WIDTH = 31;
+const PI_GLYPH_HEIGHT = 9;
 
 type Theme = ReturnType<ExtensionContext["ui"]["getTheme"]>;
+
+function buildPiAscii(): string[] {
+  const rows = Array.from({ length: PI_GLYPH_HEIGHT }, () => Array(PI_GLYPH_WIDTH).fill(" "));
+  const left = 5;
+  const right = PI_GLYPH_WIDTH - left - 1;
+
+  // A heavy, symmetrical lowercase-style pi: a double crossbar and two stems.
+  for (let y = 0; y < 2; y += 1) {
+    for (let x = left; x <= right; x += 1) rows[y][x] = "#";
+  }
+  for (let y = 2; y < PI_GLYPH_HEIGHT; y += 1) {
+    for (let x = left; x < left + 3; x += 1) rows[y][x] = "#";
+    for (let x = right - 2; x <= right; x += 1) rows[y][x] = "#";
+  }
+
+  return rows.map((row) => row.join(""));
+}
+
+const PI_MARK = buildPiAscii();
 
 function isInteractiveTerminal(): boolean {
   return Boolean(process.stdout.isTTY && process.stdin.isTTY);
@@ -38,14 +50,17 @@ function hasConversation(ctx: ExtensionContext): boolean {
 }
 
 class HIGEditor extends CustomEditor {
+  private readonly ctx: ExtensionContext;
+
   constructor(
     tui: TUI,
     theme: EditorTheme,
     keybindings: ConstructorParameters<typeof CustomEditor>[2],
     options: EditorOptions | undefined,
-    private readonly ctx: ExtensionContext,
+    ctx: ExtensionContext,
   ) {
     super(tui, theme, keybindings, options);
+    this.ctx = ctx;
   }
 
   override render(width: number): string[] {
