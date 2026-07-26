@@ -50,7 +50,13 @@ export default function casino(pi: ExtensionAPI): void {
 
   const enable = (ctx: ExtensionContext): boolean => {
     const originalTheme = ctx.ui.theme;
-    const result = ctx.ui.setTheme(THEME_NAME);
+    const casinoTheme = ctx.ui.getTheme(THEME_NAME);
+    if (!casinoTheme) {
+      ctx.ui.notify("Could not enable Casino Mode: theme unavailable", "error");
+      return false;
+    }
+    // Pass the Theme object, not the name: pi persists named theme selections.
+    const result = ctx.ui.setTheme(casinoTheme);
     if (!result.success) {
       ctx.ui.notify(`Could not enable Casino Mode: ${result.error ?? "theme unavailable"}`, "error");
       return false;
