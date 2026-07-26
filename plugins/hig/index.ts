@@ -13,16 +13,17 @@ type Theme = ReturnType<ExtensionContext["ui"]["getTheme"]>;
 
 function buildPiAscii(): string[] {
   const rows = Array.from({ length: PI_GLYPH_HEIGHT }, () => Array(PI_GLYPH_WIDTH).fill(" "));
-  const left = 5;
+  const left = 6;
   const right = PI_GLYPH_WIDTH - left - 1;
 
-  // A heavy, symmetrical lowercase-style pi: a double crossbar and two stems.
-  for (let y = 0; y < 2; y += 1) {
-    for (let x = left; x <= right; x += 1) rows[y][x] = "#";
-  }
-  for (let y = 2; y < PI_GLYPH_HEIGHT; y += 1) {
-    for (let x = left; x < left + 3; x += 1) rows[y][x] = "#";
-    for (let x = right - 2; x <= right; x += 1) rows[y][x] = "#";
+  // Terminal line-drawing glyphs make a clean, unmistakable mathematical π:
+  // a rounded overbar with two strong descending stems.
+  rows[0][left] = "╭";
+  rows[0][right] = "╮";
+  for (let x = left + 1; x < right; x += 1) rows[0][x] = "━";
+  for (let y = 1; y < PI_GLYPH_HEIGHT; y += 1) {
+    rows[y][left] = "┃";
+    rows[y][right] = "┃";
   }
 
   return rows.map((row) => row.join(""));
