@@ -325,7 +325,4 @@ export default function clickup(pi: ExtensionAPI): void {
       }
     },
   });
-
-  // Keep the tool out of the initial prompt until the first explicit start command.
-  syncToolActivation(pi);
 }
