@@ -77,7 +77,12 @@ class HIGEditor extends CustomEditor {
     const topSpace = Math.max(0, Math.floor((available - PI_MARK.length) / 2));
     const bottomSpace = Math.max(0, available - topSpace - PI_MARK.length);
     const emptyLine = "";
-    const mark = PI_MARK.map((line) => this.ctx.ui.theme.fg("accent", line));
+    const viewportWidth = Math.max(width, this.tui.terminal.columns, PI_GLYPH_WIDTH);
+    const markLeft = Math.floor((viewportWidth - PI_GLYPH_WIDTH) / 2);
+    const mark = PI_MARK.map((line) => {
+      const right = Math.max(0, viewportWidth - markLeft - PI_GLYPH_WIDTH);
+      return `${" ".repeat(markLeft)}${this.ctx.ui.theme.fg("accent", line)}${" ".repeat(right)}`;
+    });
 
     return [
       ...Array.from({ length: topSpace }, () => emptyLine),
