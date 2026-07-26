@@ -1,26 +1,29 @@
 # ClickUp pi plugin
 
-Command-gated ClickUp API access for pi. Access starts locked and is granted only through explicit user commands.
+Command-gated ClickUp API access for pi. Access starts locked and is granted only through the `/clickup` settings menu.
 
-## Commands
+## Menu
+
+Open the UI with:
 
 ```text
-/clickup-start         # grant all CRUD permissions
-/clickup-start r       # grant read permission
-/clickup-start rc      # grant read and create permissions
-/clickup-start rcu     # grant read, create, and update permissions
-/clickup-stop          # revoke all permissions
-/clickup-stop u        # revoke update permission only
-/clickup-logout        # revoke access and delete the saved credential
+/clickup
 ```
 
-Permissions are additive on start and subtractive on stop. Every access command prints the current permissions. `/clickup-stop` and `/clickup-logout` never require authentication and act as local emergency controls.
+From the menu you can:
+
+- grant selected CRUD permissions (authenticating only when needed)
+- revoke selected permissions or stop all access immediately
+- view the current access, permission, and credential state
+- log out and delete the saved operating-system credential
+
+Permissions are additive when granted and subtractive when revoked. `/clickup` never makes an API request itself; it only changes the permission gate used by the model's `clickup_request` tool.
 
 ## Authentication
 
-When starting access without a saved credential, the plugin opens a masked popup for a ClickUp personal/API token. The token is stored in the operating-system credential store through `keytar` and is never included in tool arguments or conversation messages.
+When starting access without a saved credential, the plugin opens a masked prompt for a ClickUp personal/API token. The token is stored in the operating-system credential store through `keytar` and is never included in tool arguments or conversation messages.
 
-`/clickup-logout` clears the in-memory token and deletes the saved credential. If `CLICKUP_API_KEY` is set as an environment variable, it must be unset separately.
+Log out from `/clickup` to clear the in-memory token and delete the saved credential. If `CLICKUP_API_KEY` is set as an environment variable, it must be unset separately.
 
 ## CRUD permissions
 

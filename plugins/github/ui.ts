@@ -327,7 +327,7 @@ class NumberInputPanel extends Container {
 }
 
 function actionPanel(menu: MenuContext, title: string, description: string, operation: () => Promise<string | undefined>): Component {
-  return new ActionPanel(title, description, operation, menu.done, menu.tui.requestRender);
+  return new ActionPanel(title, description, operation, menu.done, () => menu.tui.requestRender());
 }
 
 function readPanel(menu: MenuContext, title: string, description: string, load: () => Promise<string>): Component {
@@ -412,7 +412,7 @@ function makeWorkflow(menu: MenuContext): Component {
         const number = Number.parseInt(value.trim(), 10);
         if (!Number.isInteger(number) || number < 1) throw new Error("Enter a valid pull-request number.");
         return menu.actions.checkoutByNumber(number);
-      }, menu.done, menu.tui.requestRender),
+      }, menu.done, () => menu.tui.requestRender()),
     },
     {
       id: "return",

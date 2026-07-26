@@ -1,11 +1,12 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { CLICKUP_TOOL_NAME } from "./constants.ts";
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { createClickUpMenu, type ClickUpMenuActions } from "./ui.ts";
+import { CLICKUP_STATUS_KEY, CLICKUP_TOOL_NAME } from "./constants.ts";
 import { CredentialStore } from "./auth/credential-store.ts";
 import { promptForApiKey } from "./auth/prompt.ts";
 import { ClickUpClient } from "./api/client.ts";
 import { RequestParams } from "./api-schema.ts";
-import { PermissionManager, parsePermissions, permissionForMethod, permissionText } from "./permissions.ts";
-import { publishPermissionsToModel, reportPermissions } from "./ui/permissions.ts";
+import { PermissionManager, permissionForMethod, permissionText } from "./permissions.ts";
+import { publishPermissionsToModel } from "./ui/permissions.ts";
 
 export default function clickup(pi: ExtensionAPI): void {
   const permissions = new PermissionManager();
@@ -25,63 +26,43 @@ export default function clickup(pi: ExtensionAPI): void {
     apiKey = undefined;
   };
 
-  // Access is intentionally ephemeral: new and reloaded sessions start locked.
-  pi.on("session_start", (_event, ctx) => {
-    reset();
-    ensureToolActive();
-    // Keep the model informed without adding startup UI noise.
-    publishPermissionsToModel(pi, permissions);
-  });
+  const syncState = (ctx: ExtensionCommandContext, note?: string): void => {
+    const current = permissionText(permissions.current);
+    ctx.ui.setStatus(CLICKUP_STATUS_KEY, current === "none" ? undefined : `ClickUp: ${current}`);
+    publishPermissionsToModel(pi, permissions, note);
+  };
 
-  pi.on("session_shutdown", reset);
-
-  pi.registerCommand("clickup-start", {
-    description: "Grant ClickUp CRUD permissions. Empty means all permissions.",
-    handler: async (args, ctx) => {
-      try {
-        const requested = parsePermissions(args, true);
-        const credential = apiKey ?? (await credentials.load());
-
-        if (!credential) {
-          const entered = await promptForApiKey(ctx);
-          if (!entered) throw new Error("ClickUp access was not started: no API key supplied.");
-          await credentials.save(entered);
-          apiKey = entered;
-        } else {
-          apiKey = credential;
-        }
-
-        permissions.grant(requested);
-        ctx.ui.notify(`ClickUp access started: granted ${permissionText(requested)}.`, "info");
-      } catch (error) {
-        ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
-      } finally {
-        reportPermissions(ctx, permissions, "ClickUp permission status:");
-        publishPermissionsToModel(pi, permissions);
+  const actions = (ctx: ExtensionCommandContext): ClickUpMenuActions => ({
+    currentPermissions: () => permissions.current,
+    start: async (requested) => {
+      if (requested.size === 0) throw new Error("Select at least one permission before starting access.");
+      const credential = apiKey ?? (await credentials.load());
+      if (!credential) {
+        const entered = await promptForApiKey(ctx);
+        if (!entered) throw new Error("ClickUp access was not started: no API key supplied.");
+        await credentials.save(entered);
+        apiKey = entered;
+      } else {
+        apiKey = credential;
       }
+      permissions.grant(requested);
+      syncState(ctx);
+      return `Granted ${permissionText(requested)}. Current permissions: ${permissionText(permissions.current)}.`;
     },
-  });
-
-  pi.registerCommand("clickup-stop", {
-    description: "Revoke ClickUp CRUD permissions. Empty means all permissions. Does not require auth.",
-    handler: async (args, ctx) => {
-      try {
-        const revoked = parsePermissions(args, true);
-        permissions.revoke(revoked);
-        if (!permissions.hasAny) apiKey = undefined;
-        ctx.ui.notify(`ClickUp access stopped: revoked ${permissionText(revoked)}.`, "info");
-      } catch (error) {
-        ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
-      } finally {
-        reportPermissions(ctx, permissions, "ClickUp permission status:");
-        publishPermissionsToModel(pi, permissions);
-      }
+    revoke: async (requested) => {
+      permissions.revoke(requested);
+      if (!permissions.hasAny) apiKey = undefined;
+      syncState(ctx);
+      return `Revoked ${permissionText(requested)}. Current permissions: ${permissionText(permissions.current)}.`;
     },
-  });
-
-  pi.registerCommand("clickup-logout", {
-    description: "Stop ClickUp access and delete the saved API key. Does not require auth.",
-    handler: async (_args, ctx) => {
+    stop: async () => {
+      const previous = permissionText(permissions.current);
+      permissions.reset();
+      apiKey = undefined;
+      syncState(ctx);
+      return `ClickUp access stopped. Revoked ${previous}.`;
+    },
+    logout: async () => {
       permissions.reset();
       apiKey = undefined;
       const deleted = await credentials.delete();
@@ -92,18 +73,50 @@ export default function clickup(pi: ExtensionAPI): void {
       const environmentMessage = environmentCredential
         ? " CLICKUP_API_KEY is still set externally and must be unset separately."
         : "";
+      syncState(ctx, "Credential state: LOGGED OUT. Access must be explicitly started again.");
+      return `ClickUp logged out. ${storageMessage}${environmentMessage}`;
+    },
+    status: () => {
+      const current = permissionText(permissions.current);
+      const credential = apiKey
+        ? "loaded for this session"
+        : credentials.hasEnvironmentCredential()
+          ? "provided by CLICKUP_API_KEY"
+          : "not loaded";
+      return [
+        `Access: ${current === "none" ? "STOPPED" : "ACTIVE"}`,
+        `CRUD permissions: ${current}`,
+        `Credential: ${credential}`,
+      ].join("\\n");
+    },
+  });
 
-      ctx.ui.notify(`ClickUp logged out. ${storageMessage}${environmentMessage}`, "info");
-      reportPermissions(ctx, permissions, "ClickUp permission status:");
-      publishPermissionsToModel(
-        pi,
-        permissions,
-        "Credential state: LOGGED OUT. The next /clickup-start requires authentication again.",
+  // Access is intentionally ephemeral: new and reloaded sessions start locked.
+  pi.on("session_start", (_event, ctx) => {
+    reset();
+    ensureToolActive();
+    syncState(ctx as ExtensionCommandContext);
+  });
+
+  pi.on("session_shutdown", (_event, ctx) => {
+    reset();
+    ctx.ui.setStatus(CLICKUP_STATUS_KEY, undefined);
+  });
+
+  pi.registerCommand("clickup", {
+    description: "Open the ClickUp access and permissions menu",
+    handler: async (_args, ctx) => {
+      if (ctx.mode !== "tui") {
+        ctx.ui.notify("/clickup requires TUI mode.", "error");
+        return;
+      }
+      await ctx.ui.custom<void>((tui, _theme, _keybindings, done) =>
+        createClickUpMenu(ctx, actions(ctx), tui, done),
       );
     },
   });
 
-  // Protects against stale model calls after clickup-stop.
+  // Protects against stale model calls after access is stopped in the menu.
   pi.on("tool_call", async (event) => {
     const toolEvent = event as { toolName?: string; input?: Record<string, unknown> };
     if (toolEvent.toolName !== CLICKUP_TOOL_NAME) return;
