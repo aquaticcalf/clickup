@@ -18,7 +18,15 @@ More integrations can be added under `plugins/<name>/` without changing the coll
 
 ## Try without cloning or permanently installing
 
-Run the published GitHub package for one pi session:
+This package uses pnpm's `catalog:` protocol. npm cannot parse that protocol, and pi uses npm by default. Configure pi to use pnpm before running the commands below:
+
+```json
+{
+  "npmCommand": ["pnpm"]
+}
+```
+
+Add this to `~/.pi/agent/settings.json`, then run the published GitHub package for one pi session:
 
 ```bash
 pi -e git:github.com/aquaticcalf/pi-plugins@master
@@ -65,15 +73,7 @@ pnpm install
 pnpm typecheck
 ```
 
-Pi uses npm by default when installing Git packages. To make Pi use pnpm, add this to `~/.pi/agent/settings.json`:
-
-```json
-{
-  "npmCommand": ["pnpm"]
-}
-```
-
-The `packageManager` field pins the workspace to pnpm 11.17.0. A new terminal may be needed after installing pnpm so it is on `PATH`.
+Pi uses npm by default for package operations, so the `npmCommand` setting above is required for this repository. The `packageManager` field pins the workspace to pnpm 11.17.0. A new terminal may be needed after installing pnpm so it is on `PATH`.
 
 ## Adding a plugin
 
