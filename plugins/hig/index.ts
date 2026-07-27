@@ -14,14 +14,16 @@ import {
   type EditorTheme,
   type TUI,
 } from "@earendil-works/pi-tui"
-
 const THEME_NAME = "hig"
 const ALT_SCREEN_ON = "\u001b[?1049h\u001b[2J\u001b[H"
+const ALT_SCREEN_CLEAR = "\u001b[2J\u001b[H\u001b[3J"
+const PRIMARY_TERMINAL_CLEAR = "\u001b[2J\u001b[H\u001b[3J"
 const ALT_SCREEN_OFF = "\u001b[?1049l"
 const MOUSE_ON = "\u001b[?1002h\u001b[?1006h"
 const MOUSE_OFF = "\u001b[?1002l\u001b[?1006l"
 const FACE_WIDTH = 45
 const FACE_HEIGHT = 14
+const EDITOR_MIN_ROWS = 3
 const REDUCED_MOTION = /^(1|true|yes)$/i.test(process.env.HIG_REDUCED_MOTION ?? "")
 const ESCAPE = String.fromCharCode(0x1b)
 const BELL = String.fromCharCode(0x07)
@@ -81,7 +83,7 @@ function enterAlternateScreen(): boolean {
 }
 
 function leaveAlternateScreen(): void {
-  if (!isInteractiveTerminal()) return
+  process.stdout.write(ALT_SCREEN_CLEAR)
   process.stdout.write(ALT_SCREEN_OFF)
 }
 
@@ -97,8 +99,237 @@ function getComponentChildren(component: unknown): unknown[] | undefined {
   return Array.isArray(children) ? children : undefined
 }
 
+function isRenderable(component: unknown): component is { render(width: number): string[] } {
+  return (
+    typeof component === "object" &&
+    component !== null &&
+    "render" in component &&
+    typeof component.render === "function"
+  )
+}
+
 type RenderableContainer = {
   render(width: number): string[]
+}
+
+const STATUS_EXIT_FADE_MS = 60
+
+function reserveRows(
+  container: RenderableContainer,
+  rows: number,
+  requestRender: () => void,
+): () => void {
+  const originalRender = container.render.bind(container)
+  let lastLines: string[] | undefined
+  let exitTimer: ReturnType<typeof setTimeout> | undefined
+  let exitAt = 0
+
+  const padded = (lines: string[]): string[] =>
+    lines.length >= rows
+      ? lines
+      : [...lines, ...Array.from({ length: rows - lines.length }, () => "")]
+
+  container.render = (width: number): string[] => {
+    const lines = originalRender(width)
+    if (lines.length > 0) {
+      if (exitTimer) clearTimeout(exitTimer)
+      exitTimer = undefined
+      exitAt = 0
+      lastLines = lines
+      return padded(lines)
+    }
+
+    if (lastLines && exitAt === 0) {
+      exitAt = Date.now() + STATUS_EXIT_FADE_MS
+      exitTimer = setTimeout(() => {
+        exitTimer = undefined
+        requestRender()
+      }, STATUS_EXIT_FADE_MS)
+    }
+
+    if (lastLines && Date.now() < exitAt) {
+      const faded = lastLines.map((line) =>
+        line.length === 0 ? line : `\u001b[2m${stripAnsi(line)}\u001b[22m`,
+      )
+      return padded(faded)
+    }
+    lastLines = undefined
+    exitAt = 0
+    return padded([])
+  }
+
+  return () => {
+    if (exitTimer) clearTimeout(exitTimer)
+    container.render = originalRender
+  }
+}
+
+type EditorLayoutSource = {
+  getBaseEditorLines(width: number): string[]
+}
+
+type FlexItem = {
+  basis: number
+  minSize?: number
+  grow?: number
+  shrink?: number
+  shrinkPriority?: number
+}
+
+type FlexSlot = {
+  start: number
+  size: number
+}
+
+/**
+ * A small vertical flex engine for the pieces HIG controls. Fixed-height
+ * sections keep their natural size, the conversation shrinks into the
+ * viewport, and the editor receives any remaining space.
+ */
+class FlexColumn {
+  private readonly items: FlexItem[]
+
+  constructor(items: FlexItem[]) {
+    this.items = items
+  }
+
+  layout(available: number): FlexSlot[] {
+    const height = Math.max(0, available)
+    const sizes = this.items.map((item) => Math.max(item.minSize ?? 0, item.basis))
+    const minimums = this.items.map((item) => Math.max(0, item.minSize ?? 0))
+    const naturalHeight = sizes.reduce((total, size) => total + size, 0)
+
+    if (naturalHeight < height) {
+      this.distribute(
+        sizes,
+        height - naturalHeight,
+        this.items.map((item) => item.grow ?? 0),
+      )
+    } else if (naturalHeight > height) {
+      let deficit = naturalHeight - height
+      const priorities = [
+        ...new Set(
+          this.items
+            .filter((item) => (item.shrink ?? 0) > 0)
+            .map((item) => item.shrinkPriority ?? 0),
+        ),
+      ].sort((a, b) => b - a)
+
+      for (const priority of priorities) {
+        if (deficit <= 0) break
+        const weights = this.items.map((item, index) =>
+          (item.shrinkPriority ?? 0) === priority
+            ? (sizes[index] - minimums[index]) * (item.shrink ?? 0)
+            : 0,
+        )
+        const capacity = weights.reduce((total, weight) => total + weight, 0)
+        const reduction = Math.min(deficit, capacity)
+        this.distribute(sizes, -reduction, weights, minimums)
+        deficit -= reduction
+      }
+    }
+
+    const slots: FlexSlot[] = []
+    let start = 0
+    for (const size of sizes) {
+      slots.push({ start, size })
+      start += size
+    }
+    return slots
+  }
+
+  private distribute(
+    sizes: number[],
+    amount: number,
+    weights: number[],
+    minimums: number[] = [],
+  ): void {
+    const totalWeight = weights.reduce((total, weight) => total + weight, 0)
+    if (totalWeight <= 0 || amount === 0) return
+
+    const direction = amount < 0 ? -1 : 1
+    const target = Math.abs(amount)
+    const changes = weights.map((weight) => (weight / totalWeight) * target)
+    const wholeChanges = changes.map((change) => Math.floor(change))
+    let distributed = wholeChanges.reduce((total, change) => total + change, 0)
+
+    // Give leftover rows to the items with the largest fractional shares.
+    const order = changes
+      .map((change, index) => ({ index, fraction: change - wholeChanges[index] }))
+      .sort((a, b) => b.fraction - a.fraction)
+    for (const { index } of order) {
+      if (distributed >= target) break
+      wholeChanges[index] += 1
+      distributed += 1
+    }
+
+    for (let index = 0; index < sizes.length; index++) {
+      sizes[index] = Math.max(minimums[index] ?? 0, sizes[index] + direction * wholeChanges[index])
+    }
+  }
+}
+
+type ChatLayout = {
+  slots: {
+    beforeChat: FlexSlot
+    chat: FlexSlot
+    betweenChatAndEditor: FlexSlot
+    editor: FlexSlot
+    afterEditor: FlexSlot
+  }
+  editorRows: number
+}
+
+/**
+ * Builds and caches the vertical layout shared by the chat viewport and the
+ * editor. Keeping this here prevents both components from independently
+ * reproducing viewport arithmetic during the same render.
+ */
+class HIGFlex {
+  private cacheKey = ""
+  private cachedLayout: ChatLayout | undefined
+
+  layout(
+    width: number,
+    terminalRows: number,
+    lineCount: number,
+    rowsBeforeChat: number,
+    rowsBetweenChatAndEditor: number,
+    editorRows: number,
+    rowsAfterEditor: number,
+  ): ChatLayout {
+    const key = [
+      width,
+      terminalRows,
+      lineCount,
+      rowsBeforeChat,
+      rowsBetweenChatAndEditor,
+      editorRows,
+      rowsAfterEditor,
+    ].join(":")
+    if (key === this.cacheKey && this.cachedLayout) return this.cachedLayout
+
+    const [beforeChat, chat, betweenChatAndEditor, editor, afterEditor] = new FlexColumn([
+      { basis: rowsBeforeChat },
+      { basis: lineCount, shrink: 1, shrinkPriority: 2 },
+      { basis: rowsBetweenChatAndEditor },
+      {
+        basis: Math.min(editorRows, EDITOR_MIN_ROWS),
+        minSize: EDITOR_MIN_ROWS,
+        grow: 1,
+        shrink: 1,
+        shrinkPriority: 1,
+      },
+      { basis: rowsAfterEditor },
+    ]).layout(terminalRows)
+
+    this.cacheKey = key
+    this.cachedLayout = {
+      slots: { beforeChat, chat, betweenChatAndEditor, editor, afterEditor },
+      editorRows,
+    }
+    return this.cachedLayout
+  }
 }
 
 /**
@@ -109,11 +340,11 @@ type RenderableContainer = {
 class ChatViewport {
   private readonly originalRender: (width: number) => string[]
   private viewportRows = 0
-  private visibleRows = 0
   private lineCount = 0
   private scrollOffset = 0
   private visibleLines: string[] = []
   private screenTop = 0
+  private layout: ChatLayout | undefined
   private selectionStart: MousePoint | undefined
   private selectionEnd: MousePoint | undefined
   private selecting = false
@@ -122,27 +353,59 @@ class ChatViewport {
     | undefined
 
   constructor(
+    private readonly tui: TUI,
     private readonly container: RenderableContainer,
+    private readonly editor: EditorLayoutSource,
     private readonly theme: Theme,
+    private readonly flex: HIGFlex,
   ) {
     this.originalRender = container.render.bind(container)
     container.render = (width: number): string[] => {
       const lines = this.originalRender(width)
       this.lineCount = lines.length
-      const rows = this.viewportRows > 0 ? this.viewportRows : lines.length
+      this.layout = this.measureLayout(width)
+      this.setViewportRows(this.layout.slots.chat.size)
+      const rows = this.viewportRows
       const maxOffset = Math.max(0, lines.length - rows)
       this.scrollOffset = Math.min(this.scrollOffset, maxOffset)
       const end = Math.max(0, lines.length - this.scrollOffset)
       const start = Math.max(0, end - rows)
       const visible = lines.slice(start, end)
       this.visibleLines = visible
-      this.visibleRows = visible.length
       return visible.map((line, index) => this.highlightLine(line, index))
     }
   }
 
-  getVisibleRows(): number {
-    return this.visibleRows
+  private measureLayout(width: number): ChatLayout {
+    const children = this.tui.children as unknown[]
+    const chatIndex = children.indexOf(this.container)
+    const editorContainerIndex = children.findIndex((child) =>
+      getComponentChildren(child)?.includes(this.editor),
+    )
+    const editorIndex = editorContainerIndex >= 0 ? editorContainerIndex : children.length
+    const rows = (start: number, end: number): number =>
+      children.slice(Math.max(0, start), Math.max(0, end)).reduce<number>((total, child) => {
+        if (!isRenderable(child)) return total
+        return total + child.render(width).length
+      }, 0)
+
+    const editorRows = this.editor.getBaseEditorLines(width).length
+    const rowsBeforeChat = rows(0, chatIndex)
+    const rowsBetweenChatAndEditor = rows(chatIndex + 1, editorIndex)
+    const rowsAfterEditor = rows(editorIndex + 1, children.length)
+    return this.flex.layout(
+      width,
+      this.tui.terminal.rows,
+      this.lineCount,
+      rowsBeforeChat,
+      rowsBetweenChatAndEditor,
+      editorRows,
+      rowsAfterEditor,
+    )
+  }
+
+  getLayout(): ChatLayout | undefined {
+    return this.layout
   }
 
   setScreenTop(row: number): void {
@@ -285,12 +548,10 @@ class ChatViewport {
     return `${before}${this.theme.bg(flashBackground, stripAnsi(selected))}${after}`
   }
 
-  setViewportRows(rows: number): boolean {
+  setViewportRows(rows: number): void {
     const nextRows = Math.max(0, rows)
-    const changed = this.viewportRows !== nextRows
     this.viewportRows = nextRows
     this.scrollOffset = Math.min(this.scrollOffset, Math.max(0, this.lineCount - nextRows))
-    return changed
   }
 
   scrollBy(lines: number): boolean {
@@ -384,7 +645,6 @@ class HIGEditor extends CustomEditor {
     options: EditorOptions | undefined,
     private readonly ctx: ExtensionContext,
     private readonly frameProvider: () => string[],
-    private readonly chatViewport: ChatViewport | undefined,
   ) {
     super(higTui, theme, keybindings, options)
     this.higTui = higTui
@@ -393,6 +653,47 @@ class HIGEditor extends CustomEditor {
 
   private readonly higTui: TUI
   private readonly higKeybindings: ConstructorParameters<typeof CustomEditor>[2]
+  private chatViewport: ChatViewport | undefined
+  private baseEditorCache: { width: number; state: string; lines: string[] } | undefined
+  private emptyFaceLayout:
+    | { markSpace: number; faceRows: number; top: number; bottom: number }
+    | undefined
+
+  setChatViewport(chatViewport: ChatViewport | undefined): void {
+    this.chatViewport = chatViewport
+  }
+
+  getBaseEditorLines(width: number): string[] {
+    const cursor = this.getCursor()
+    const state = `${this.focused}:${this.getText()}:${cursor.line}:${cursor.col}`
+    if (this.baseEditorCache?.width === width && this.baseEditorCache.state === state) {
+      return this.baseEditorCache.lines
+    }
+    const lines = super.render(width)
+    this.baseEditorCache = { width, state, lines }
+    return lines
+  }
+
+  override invalidate(): void {
+    this.baseEditorCache = undefined
+    this.emptyFaceLayout = undefined
+    super.invalidate()
+  }
+
+  override setText(text: string): void {
+    this.baseEditorCache = undefined
+    super.setText(text)
+  }
+
+  override setPaddingX(paddingX: number): void {
+    this.baseEditorCache = undefined
+    super.setPaddingX(paddingX)
+  }
+
+  override insertTextAtCursor(text: string): void {
+    this.baseEditorCache = undefined
+    super.insertTextAtCursor(text)
+  }
 
   override handleInput(data: string): void {
     if (this.chatViewport && this.higKeybindings.matches(data, "tui.editor.pageUp")) {
@@ -404,65 +705,72 @@ class HIGEditor extends CustomEditor {
       return
     }
     super.handleInput(data)
+    this.baseEditorCache = undefined
+  }
+
+  private fitEditorLines(lines: string[], height: number): string[] {
+    if (height >= lines.length) return lines
+    if (height <= 0) return []
+    if (height === 1) return [lines[0]]
+    return [lines[0], ...lines.slice(1, height - 1), lines[lines.length - 1]]
+  }
+
+  private getEmptyFaceLayout(markSpace: number, faceRows: number): { top: number; bottom: number } {
+    if (
+      this.emptyFaceLayout?.markSpace === markSpace &&
+      this.emptyFaceLayout.faceRows === faceRows
+    ) {
+      return this.emptyFaceLayout
+    }
+    const [top, , bottom] = new FlexColumn([
+      { basis: 0, grow: 1 },
+      { basis: faceRows },
+      { basis: 0, grow: 1 },
+    ]).layout(markSpace)
+    this.emptyFaceLayout = { markSpace, faceRows, top: top.size, bottom: bottom.size }
+    return this.emptyFaceLayout
   }
 
   override render(width: number): string[] {
-    const editorLines = super.render(width)
-    const editorContainerIndex = this.higTui.children.findIndex((child) =>
-      getComponentChildren(child)?.includes(this),
+    const baseEditorLines = this.getBaseEditorLines(width)
+    const layout = this.chatViewport?.getLayout()
+    const editorSlot = layout?.slots.editor
+    const editorLines = this.fitEditorLines(
+      baseEditorLines,
+      editorSlot?.size ?? baseEditorLines.length,
     )
-    const rowsBeforeEditor =
-      editorContainerIndex < 0
-        ? 0
-        : this.higTui.children
-            .slice(0, editorContainerIndex)
-            .reduce((rows, child) => rows + child.render(width).length, 0)
-    const rowsAfterEditor =
-      editorContainerIndex < 0
-        ? 0
-        : this.higTui.children
-            .slice(editorContainerIndex + 1)
-            .reduce((rows, child) => rows + child.render(width).length, 0)
-    const rowsBeforeChat = this.chatViewport
-      ? Math.max(0, rowsBeforeEditor - this.chatViewport.getVisibleRows())
-      : rowsBeforeEditor
-    const desiredChatRows = Math.max(
-      0,
-      this.higTui.terminal.rows - rowsBeforeChat - rowsAfterEditor - editorLines.length,
-    )
-    if (this.chatViewport?.setViewportRows(desiredChatRows)) {
-      this.higTui.requestRender()
-    }
     // terminal mouse coordinates are 1-based while render rows are 0-based.
-    this.chatViewport?.setScreenTop(Math.max(0, rowsBeforeChat - 1))
-    const adjustedRowsBeforeEditor = rowsBeforeChat + (this.chatViewport?.getVisibleRows() ?? 0)
-    const availableRows = Math.max(
-      0,
-      this.higTui.terminal.rows - adjustedRowsBeforeEditor - rowsAfterEditor - editorLines.length,
-    )
+    this.chatViewport?.setScreenTop(Math.max(0, (layout?.slots.chat.start ?? 0) - 1))
+    const availableRows = Math.max(0, (editorSlot?.size ?? editorLines.length) - editorLines.length)
 
-    if (hasConversation(this.ctx)) {
-      return [...Array.from({ length: availableRows }, () => ""), ...editorLines]
+    // The agent-start render can happen before Pi appends the user message to
+    // the session branch. Do not render the empty-state face while working, or
+    // it temporarily expands the layout and pushes the editor into scrollback.
+    let output: string[]
+    if (hasConversation(this.ctx) || !this.ctx.isIdle()) {
+      output = [...Array.from({ length: availableRows }, () => ""), ...editorLines]
+    } else {
+      const face = this.frameProvider()
+      const visibleFace = face.slice(0, Math.min(face.length, availableRows))
+      const markSpace = availableRows
+      const { top, bottom } = this.getEmptyFaceLayout(markSpace, visibleFace.length)
+      const mark = visibleFace.map((line) => {
+        const greeting = line.replace(GREETING_TEXT, this.ctx.ui.theme.bold(GREETING_TEXT))
+        const styled = this.ctx.ui.theme.fg("accent", greeting)
+        if (width < FACE_WIDTH) return truncateToWidth(styled, width, "")
+        const left = Math.floor((width - FACE_WIDTH) / 2)
+        return `${" ".repeat(left)}${styled}${" ".repeat(width - left - FACE_WIDTH)}`
+      })
+
+      output = [
+        ...Array.from({ length: top }, () => ""),
+        ...mark,
+        ...Array.from({ length: bottom }, () => ""),
+        ...editorLines,
+      ]
     }
 
-    const face = this.frameProvider()
-    const markSpace = Math.max(face.length, availableRows)
-    const topSpace = Math.max(0, Math.floor((markSpace - face.length) / 2))
-    const bottomSpace = Math.max(0, markSpace - topSpace - face.length)
-    const mark = face.map((line) => {
-      const greeting = line.replace(GREETING_TEXT, this.ctx.ui.theme.bold(GREETING_TEXT))
-      const styled = this.ctx.ui.theme.fg("accent", greeting)
-      if (width < FACE_WIDTH) return truncateToWidth(styled, width, "")
-      const left = Math.floor((width - FACE_WIDTH) / 2)
-      return `${" ".repeat(left)}${styled}${" ".repeat(width - left - FACE_WIDTH)}`
-    })
-
-    return [
-      ...Array.from({ length: topSpace }, () => ""),
-      ...mark,
-      ...Array.from({ length: bottomSpace }, () => ""),
-      ...editorLines,
-    ]
+    return output
   }
 }
 
@@ -470,17 +778,21 @@ export default function hig(pi: ExtensionAPI): void {
   let inAlternateScreen = false
   let mouseTrackingEnabled = false
   let animationTimer: ReturnType<typeof setInterval> | undefined
-  let requestRender: (() => void) | undefined
+  let requestRender: ((force?: boolean) => void) | undefined
   let removeTerminalInputListener: (() => void) | undefined
   let chatViewport: ChatViewport | undefined
   let mouseSelecting = false
   let copyFlashTimer: ReturnType<typeof setInterval> | undefined
+  let restoreReservedStatus: (() => void) | undefined
   let frameIndex = 0
 
   process.once("exit", () => {
     if (removeTerminalInputListener) removeTerminalInputListener()
     if (mouseTrackingEnabled) process.stdout.write(MOUSE_OFF)
-    if (inAlternateScreen) leaveAlternateScreen()
+    if (inAlternateScreen) {
+      leaveAlternateScreen()
+      process.stdout.write(PRIMARY_TERMINAL_CLEAR)
+    }
   })
 
   pi.on("session_start", (_event, ctx) => {
@@ -494,19 +806,29 @@ export default function hig(pi: ExtensionAPI): void {
 
     frameIndex = 0
     ctx.ui.setEditorComponent((tui, editorTheme, keybindings) => {
-      requestRender = () => tui.requestRender()
-      const chatContainer = tui.children[2] as RenderableContainer | undefined
+      requestRender = (force = false) => tui.requestRender(force)
+      if (!restoreReservedStatus) {
+        const statusContainer = tui.children[4] as RenderableContainer | undefined
+        if (statusContainer) {
+          restoreReservedStatus = reserveRows(statusContainer, 2, () => requestRender?.())
+        }
+      }
       chatViewport?.dispose()
-      chatViewport = chatContainer ? new ChatViewport(chatContainer, ctx.ui.theme) : undefined
-      return new HIGEditor(
+      const flex = new HIGFlex()
+      const editor = new HIGEditor(
         tui,
         editorTheme,
         keybindings,
         undefined,
         ctx,
         () => FACE_FRAMES[frameIndex],
-        chatViewport,
       )
+      const chatContainer = tui.children[2] as RenderableContainer | undefined
+      chatViewport = chatContainer
+        ? new ChatViewport(tui, chatContainer, editor, ctx.ui.theme, flex)
+        : undefined
+      editor.setChatViewport(chatViewport)
+      return editor
     })
 
     removeTerminalInputListener = ctx.ui.onTerminalInput((data) => {
@@ -567,6 +889,10 @@ export default function hig(pi: ExtensionAPI): void {
     }
   })
 
+  pi.on("agent_start", () => {
+    requestRender?.(true)
+  })
+
   pi.on("session_shutdown", (_event, ctx) => {
     if (ctx.mode !== "tui") return
     if (animationTimer) clearInterval(animationTimer)
@@ -576,6 +902,7 @@ export default function hig(pi: ExtensionAPI): void {
     removeTerminalInputListener = undefined
     chatViewport?.dispose()
     chatViewport = undefined
+    restoreReservedStatus?.()
     mouseSelecting = false
     if (mouseTrackingEnabled) process.stdout.write(MOUSE_OFF)
     mouseTrackingEnabled = false
@@ -586,5 +913,6 @@ export default function hig(pi: ExtensionAPI): void {
       leaveAlternateScreen()
       inAlternateScreen = false
     }
+    process.stdout.write(PRIMARY_TERMINAL_CLEAR)
   })
 }
