@@ -314,7 +314,10 @@ class HIGFlex {
       { basis: lineCount, shrink: 1, shrinkPriority: 2 },
       { basis: rowsBetweenChatAndEditor },
       {
-        basis: Math.min(editorRows, EDITOR_MIN_ROWS),
+        // Reserve the editor's complete natural render, including autocomplete.
+        // It can still shrink when the terminal is genuinely too small, but the
+        // chat gives up space first so the editor remains anchored at the bottom.
+        basis: editorRows,
         minSize: EDITOR_MIN_ROWS,
         grow: 1,
         shrink: 1,
@@ -654,7 +657,6 @@ class HIGEditor extends CustomEditor {
   private readonly higTui: TUI
   private readonly higKeybindings: ConstructorParameters<typeof CustomEditor>[2]
   private chatViewport: ChatViewport | undefined
-  private baseEditorCache: { width: number; state: string; lines: string[] } | undefined
   private emptyFaceLayout:
     | { markSpace: number; faceRows: number; top: number; bottom: number }
     | undefined
@@ -664,35 +666,14 @@ class HIGEditor extends CustomEditor {
   }
 
   getBaseEditorLines(width: number): string[] {
-    const cursor = this.getCursor()
-    const state = `${this.focused}:${this.getText()}:${cursor.line}:${cursor.col}`
-    if (this.baseEditorCache?.width === width && this.baseEditorCache.state === state) {
-      return this.baseEditorCache.lines
-    }
-    const lines = super.render(width)
-    this.baseEditorCache = { width, state, lines }
-    return lines
+    // autocomplete changes asynchronously without changing the editor text or
+    // cursor. Do not cache this render or the menu can remain invisible.
+    return super.render(width)
   }
 
   override invalidate(): void {
-    this.baseEditorCache = undefined
     this.emptyFaceLayout = undefined
     super.invalidate()
-  }
-
-  override setText(text: string): void {
-    this.baseEditorCache = undefined
-    super.setText(text)
-  }
-
-  override setPaddingX(paddingX: number): void {
-    this.baseEditorCache = undefined
-    super.setPaddingX(paddingX)
-  }
-
-  override insertTextAtCursor(text: string): void {
-    this.baseEditorCache = undefined
-    super.insertTextAtCursor(text)
   }
 
   override handleInput(data: string): void {
@@ -705,7 +686,6 @@ class HIGEditor extends CustomEditor {
       return
     }
     super.handleInput(data)
-    this.baseEditorCache = undefined
   }
 
   private fitEditorLines(lines: string[], height: number): string[] {
