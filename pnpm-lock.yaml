@@ -129,6 +129,12 @@ importers:
         specifier: 'catalog:'
         version: 0.82.1(ws@8.21.1)(zod@4.4.3)
 
+  plugins/rtk:
+    devDependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 0.82.1(ws@8.21.1)(zod@4.4.3)
+
   plugins/server:
     dependencies:
       keytar:

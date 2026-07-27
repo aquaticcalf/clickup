@@ -1,0 +1,12 @@
+{
+  "name": "@aquaticcalf/pi-rtk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:"
+  }
+}

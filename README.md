@@ -4,17 +4,22 @@ A pnpm workspace and distributable pi package containing independently loadable 
 
 ## Plugins
 
-| Plugin        | Location              | Purpose                                                          |
-| ------------- | --------------------- | ---------------------------------------------------------------- |
-| ClickUp       | `plugins/clickup/`    | Command-gated ClickUp API access with CRUD permissions           |
-| GitHub        | `plugins/github/`     | Settings-style GitHub PR, checks, issue, and repository workflow |
-| Casino Mode   | `plugins/casino/`     | Optional refined casino-lounge theme toggled by `/casino`        |
-| HIG           | `plugins/hig/`        | Always-loaded calm, readable visual baseline                     |
-| Prompt loader | `plugins/prompts/`    | Appends repository text prompts to the system prompt             |
-| Server        | `plugins/server/`     | Runs and manages the persistent pi host daemon                   |
-| Web Search    | `plugins/web-search/` | Multi-backend HTTP web search plus temporary Brave browser tools |
+| Plugin        | Location              | Purpose                                                                       |
+| ------------- | --------------------- | ----------------------------------------------------------------------------- |
+| ClickUp       | `plugins/clickup/`    | Command-gated ClickUp API access with CRUD permissions                        |
+| GitHub        | `plugins/github/`     | Settings-style GitHub PR, checks, issue, and repository workflow              |
+| Casino Mode   | `plugins/casino/`     | Optional refined casino-lounge theme toggled by `/casino`                     |
+| HIG           | `plugins/hig/`        | Always-loaded calm, readable visual baseline                                  |
+| Prompt loader | `plugins/prompts/`    | Appends repository text prompts to the system prompt                          |
+| Server        | `plugins/server/`     | Runs and manages the persistent pi host daemon                                |
+| Web Search    | `plugins/web-search/` | Multi-backend HTTP web search plus temporary Brave browser tools              |
+| RTK           | `plugins/rtk/`        | Rewrites supported bash commands through Rust Token Killer for compact output |
 
 More integrations can be added under `plugins/<name>/` without changing the collection architecture.
+
+## RTK setup
+
+The RTK plugin is included in the package, but the `rtk` binary is installed separately. On Windows, install the official release and ensure `rtk.exe` is on `PATH`. The plugin then rewrites supported bash commands automatically. Use `/rtk` to toggle rewriting and show its status. The preference persists like Casino Mode.
 
 ## Try without cloning or permanently installing
 
